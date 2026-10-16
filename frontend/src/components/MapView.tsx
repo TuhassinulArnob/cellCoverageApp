@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import type { MeasurementPoint, ActiveMetric, DatasetSummary } from '../types/cellscope';
-import { Layers, AlertCircle, Navigation } from 'lucide-react';
+import { Layers, AlertCircle, Navigation, Moon, Sun } from 'lucide-react';
 
 interface MapViewProps {
   measurements: MeasurementPoint[];
@@ -22,6 +22,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const [activeMetric, setActiveMetric] = useState<ActiveMetric>('rsrp');
   const [selectedPoint, setSelectedPoint] = useState<MeasurementPoint | null>(null);
+  const [isDarkBasemap, setIsDarkBasemap] = useState<boolean>(true);
+  const [tileError, setTileError] = useState<boolean>(false);
 
   const validGpsPoints = measurements.filter((p) => p.has_valid_gps && p.latitude !== null && p.longitude !== null);
 
@@ -56,7 +58,7 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  // Initialize Leaflet map
+  // Initialize Leaflet map with standard OpenStreetMap tile endpoint
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -67,10 +69,20 @@ export const MapView: React.FC<MapViewProps> = ({
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      // Standard OpenStreetMap tile endpoint complying with OSM usage policy
+      const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map);
+      });
+
+      // Gracefully handle tile loading issues
+      tileLayer.on('tileerror', (e) => {
+        console.warn('Map tile loading error:', e);
+        setTileError(true);
+      });
+
+      tileLayer.addTo(map);
 
       const markersGroup = L.layerGroup().addTo(map);
       markersLayerRef.current = markersGroup;
@@ -114,7 +126,7 @@ export const MapView: React.FC<MapViewProps> = ({
         fillColor: color,
         color: isHo ? '#ffffff' : color,
         weight: isHo ? 2 : 1,
-        opacity: 0.9,
+        opacity: 0.95,
         fillOpacity: 0.85,
       });
 
@@ -178,7 +190,11 @@ export const MapView: React.FC<MapViewProps> = ({
   }
 
   return (
-    <div className="relative flex flex-col h-[calc(100vh-140px)] min-h-[500px] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
+    <div
+      className={`relative flex flex-col h-[calc(100vh-140px)] min-h-[500px] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 ${
+        isDarkBasemap ? 'cellscope-dark-tiles' : ''
+      }`}
+    >
       {/* Top Map Controls Bar */}
       <div className="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         {/* Metric Switcher */}
@@ -201,7 +217,7 @@ export const MapView: React.FC<MapViewProps> = ({
           ))}
         </div>
 
-        {/* Filter Controls */}
+        {/* Filter Controls & Basemap Switcher */}
         <div className="pointer-events-auto flex items-center gap-2">
           {/* Cell Filter */}
           <select
@@ -217,6 +233,15 @@ export const MapView: React.FC<MapViewProps> = ({
             ))}
           </select>
 
+          {/* Basemap Dark/Light Theme Switcher */}
+          <button
+            onClick={() => setIsDarkBasemap(!isDarkBasemap)}
+            title={isDarkBasemap ? 'Switch to Standard OpenStreetMap' : 'Switch to Dark Basemap'}
+            className="p-2 bg-slate-900/90 backdrop-blur-md text-slate-300 hover:text-white border border-slate-700 rounded-lg shadow-lg hover:bg-slate-800 transition-colors"
+          >
+            {isDarkBasemap ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-cyan-400" />}
+          </button>
+
           {/* Reset / Fit Bounds */}
           <button
             onClick={handleFitBounds}
@@ -227,6 +252,22 @@ export const MapView: React.FC<MapViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Tile Loading Error Notice */}
+      {tileError && (
+        <div className="absolute top-16 left-3 right-3 z-[1000] bg-amber-950/90 backdrop-blur-md border border-amber-700 text-amber-300 text-xs px-3 py-2 rounded-lg flex items-center justify-between shadow-xl">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+            <span>Map tile service delayed or unavailable. LTE measurement points remain fully interactive.</span>
+          </div>
+          <button
+            onClick={() => setTileError(false)}
+            className="text-amber-400 hover:text-white font-bold ml-2 text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Map Container */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
