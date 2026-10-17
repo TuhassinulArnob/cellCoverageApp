@@ -48,10 +48,15 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Data
+/data/
+
 # Android
 .gradle/
+**/build/
 local.properties
 .idea/caches/
 *.apk
 *.ap_
 *.dex
+.cxx/

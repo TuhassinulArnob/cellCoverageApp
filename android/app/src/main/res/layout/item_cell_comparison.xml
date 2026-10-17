@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="8dp"
+    app:strokeColor="@color/border"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <!-- Top Header: PCI + Band + Serving Tag -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvCompPci"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="sans-serif-bold"
+                android:textColor="@color/on_surface"
+                android:textSize="15sp"
+                tools:text="PCI 288" />
+
+            <TextView
+                android:id="@+id/tvCompRoleBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip_badge"
+                android:backgroundTint="@color/surface_variant"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
+                android:textColor="@color/primary"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                tools:text="SERVING" />
+        </LinearLayout>
+
+        <!-- Band & Frequency details -->
+        <TextView
+            android:id="@+id/tvCompBandFreq"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/primary"
+            android:textSize="12sp"
+            tools:text="Band 3 (DCS 1800) • EARFCN 1600 • DL: 1845.0 MHz" />
+
+        <!-- RF Metrics comparison row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvCompRsrp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textColor="@color/rf_good"
+                android:textSize="12sp"
+                tools:text="RSRP: -82 dBm" />
+
+            <TextView
+                android:id="@+id/tvCompRsrq"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                tools:text="RSRQ: -11 dB" />
+
+            <TextView
+                android:id="@+id/tvCompSinr"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                tools:text="SINR: 14 dB" />
+        </LinearLayout>
+
+        <!-- Identifiers and sample counts -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvCompIds"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                tools:text="TAC: — • ECI: —" />
+
+            <TextView
+                android:id="@+id/tvCompSamples"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                tools:text="48 samples" />
+        </LinearLayout>
+
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

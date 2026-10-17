@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Reports Directory -->
+    <external-files-path name="reports" path="reports/" />
+    <!-- Exports Directory -->
+    <external-files-path name="exports" path="exports/" />
+    <!-- Entire App External Files Root -->
+    <external-files-path name="external_files" path="." />
+    <!-- Internal App Files -->
+    <files-path name="internal_files" path="." />
+    <!-- Internal Cache -->
+    <cache-path name="internal_cache" path="." />
+    <!-- External Cache -->
+    <external-cache-path name="external_cache" path="." />
+</paths>

@@ -1,0 +1,23 @@
+{
+  "version": 8,
+  "name": "CellScope Bangladesh OSM Basemap",
+  "sources": {
+    "osm-source": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "attribution": "© OpenStreetMap contributors"
+    }
+  },
+  "layers": [
+    {
+      "id": "osm-layer",
+      "type": "raster",
+      "source": "osm-source",
+      "minzoom": 0,
+      "maxzoom": 19
+    }
+  ]
+}

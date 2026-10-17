@@ -1,0 +1,23 @@
+{
+  "version": 8,
+  "name": "CellScope ESRI Streets",
+  "sources": {
+    "esri-source": {
+      "type": "raster",
+      "tiles": [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}.png"
+      ],
+      "tileSize": 256,
+      "attribution": "Tiles © Esri"
+    }
+  },
+  "layers": [
+    {
+      "id": "esri-layer",
+      "type": "raster",
+      "source": "esri-source",
+      "minzoom": 0,
+      "maxzoom": 19
+    }
+  ]
+}
