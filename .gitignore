@@ -47,6 +47,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+*.iml
+*.iws
+*.ipr
+.shelf/
 
 # Data
 /data/
@@ -57,6 +61,11 @@ Thumbs.db
 local.properties
 .idea/caches/
 *.apk
-*.ap_
+*.aar
+*.aab
 *.dex
+*.class
+bin/
+gen/
+out/
 .cxx/
