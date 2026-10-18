@@ -233,8 +233,17 @@ object RadioQualityEngine {
         deltaSummary: NeighborDeltaSummary
     ): DownlinkInterferenceEstimate {
         val validSamples = measurements.filter { it.rsrpDbm != null && it.rsrqDb != null }
-        if (validSamples.isEmpty()) {
-            return DownlinkInterferenceEstimate(null, 0.0, 0.0, "Insufficient RSRP/RSRQ samples.")
+        if (validSamples.size < 10) {
+            return DownlinkInterferenceEstimate(
+                avgEstimatedInterferenceDbm = null,
+                highInterferenceRatioPct = 0.0,
+                pilotPollutionRatioPct = 0.0,
+                interpretationSummary = if (validSamples.isEmpty()) {
+                    "Insufficient RSRP/RSRQ samples (0 valid samples)."
+                } else {
+                    "Insufficient evidence: Fewer than 10 valid telemetry samples available (${validSamples.size}/10)."
+                }
+            )
         }
 
         // In LTE: RSRQ = N * (RSRP / RSSI).
@@ -257,11 +266,39 @@ object RadioQualityEngine {
             (rsrp - rsrq)
         }.average().takeIf { !it.isNaN() }
 
+        val sinrValues = validSamples.mapNotNull { it.sinrDb }
+        val hasSinr = sinrValues.isNotEmpty()
+        val hasNeighbors = deltaSummary.totalEvaluatedSamples > 0
+
         val interpretation = when {
-            highInterferencePct > 25.0 -> "Severe co-channel interference observed. Cell edge or pilot pollution dominates."
-            pilotPollutionPct > 15.0 -> "High pilot pollution: Multiple overlapping intra-frequency neighbor cells without a dominant server."
-            deltaSummary.overdueHandoverCount > 5 -> "Handover latency observed: Target neighbor exceeds serving cell before handover occurs."
-            else -> "Radio channel clean. Minimal co-channel interference observed across drive route."
+            !hasSinr && !hasNeighbors -> {
+                "Interference status inconclusive — device telemetry does not expose physical SINR/CINR or neighbor cell metrics."
+            }
+            !hasSinr -> {
+                when {
+                    pilotPollutionPct > 15.0 ->
+                        "Potential interference concern: High pilot pollution (${String.format(Locale.US, "%.1f", pilotPollutionPct)}%) observed across intra-frequency neighbors without physical SINR exposed."
+                    highInterferencePct > 25.0 ->
+                        "Potential interference concern: ${String.format(Locale.US, "%.1f", highInterferencePct)}% samples exhibit high RSRP with degraded RSRQ (SINR unexposed)."
+                    else ->
+                        "Interference status inconclusive — device telemetry does not expose physical SINR/CINR."
+                }
+            }
+            else -> {
+                val meanSinr = sinrValues.average()
+                when {
+                    meanSinr < 0.0 || highInterferencePct > 25.0 ->
+                        "Measured impairment: Low physical SINR (mean ${String.format(Locale.US, "%.1f", meanSinr)} dB) indicates severe co-channel interference or pilot pollution."
+                    pilotPollutionPct > 15.0 ->
+                        "Potential interference concern: High pilot pollution (${String.format(Locale.US, "%.1f", pilotPollutionPct)}%) despite mean SINR of ${String.format(Locale.US, "%.1f", meanSinr)} dB."
+                    deltaSummary.overdueHandoverCount > 5 ->
+                        "Handover latency observed: Target neighbor exceeds serving cell before handover occurs."
+                    meanSinr > 10.0 && highInterferencePct <= 10.0 && pilotPollutionPct == 0.0 ->
+                        "Measured radio channel quality is good (Mean SINR: ${String.format(Locale.US, "%.1f", meanSinr)} dB). Minimal co-channel interference observed."
+                    else ->
+                        "Moderate radio conditions: Mean SINR ${String.format(Locale.US, "%.1f", meanSinr)} dB, low co-channel contention."
+                }
+            }
         }
 
         return DownlinkInterferenceEstimate(

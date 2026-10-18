@@ -141,4 +141,44 @@ class RadioQualityEngineTest {
         assertNull("Median SINR should be null when unexposed", sinrDist.median)
         assertTrue("Buckets should be empty when no valid SINR samples exist", sinrDist.buckets.isEmpty())
     }
+
+    @Test
+    fun testInsufficientEvidenceWhenFewerThanTenSamples() {
+        val samples = (1..5).map { createSample(it.toLong(), rsrp = -85, rsrq = -10, sinr = 15.0) }
+        val report = RadioQualityEngine.evaluateSessionQuality(samples)
+        assertTrue(
+            "Must report insufficient evidence when valid samples < 10",
+            report.interferenceEstimate.interpretationSummary.contains("Insufficient evidence: Fewer than 10 valid telemetry samples")
+        )
+    }
+
+    @Test
+    fun testInconclusiveTelemetryWhenSinrAndNeighborsMissing() {
+        val samples = (1..12).map { createSample(it.toLong(), rsrp = -85, rsrq = -10, sinr = null, neighborsRaw = null) }
+        val report = RadioQualityEngine.evaluateSessionQuality(samples)
+        assertTrue(
+            "Must report inconclusive when SINR and neighbors are absent",
+            report.interferenceEstimate.interpretationSummary.contains("Interference status inconclusive")
+        )
+    }
+
+    @Test
+    fun testMeasuredQualityWhenRealSinrExceedsTenDb() {
+        val samples = (1..12).map { createSample(it.toLong(), rsrp = -85, rsrq = -10, sinr = 16.0, neighborsRaw = null) }
+        val report = RadioQualityEngine.evaluateSessionQuality(samples)
+        assertTrue(
+            "Must report measured radio channel quality is good when SINR > 10 dB",
+            report.interferenceEstimate.interpretationSummary.contains("Measured radio channel quality is good")
+        )
+    }
+
+    @Test
+    fun testMeasuredImpairmentWhenSinrIsNegative() {
+        val samples = (1..12).map { createSample(it.toLong(), rsrp = -92, rsrq = -16, sinr = -3.5, neighborsRaw = null) }
+        val report = RadioQualityEngine.evaluateSessionQuality(samples)
+        assertTrue(
+            "Must report measured impairment when SINR < 0 dB",
+            report.interferenceEstimate.interpretationSummary.contains("Measured impairment")
+        )
+    }
 }

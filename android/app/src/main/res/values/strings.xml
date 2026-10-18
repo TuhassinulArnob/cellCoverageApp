@@ -3,10 +3,10 @@
     <string name="session_status_idle">IDLE</string>
     <string name="session_status_recording">RECORDING</string>
     <string name="session_status_paused">PAUSED</string>
-    <string name="btn_start">Start Recording</string>
-    <string name="btn_pause">Pause</string>
-    <string name="btn_resume">Resume</string>
-    <string name="btn_stop">Stop</string>
+    <string name="btn_start">Start Network Survey</string>
+    <string name="btn_pause">Pause Survey</string>
+    <string name="btn_resume">Resume Survey</string>
+    <string name="btn_stop">Stop Survey</string>
     <string name="btn_export_csv">Export CSV</string>
     <string name="btn_history">Session History</string>
     <string name="gps_status_waiting">Searching for GPS fix…</string>

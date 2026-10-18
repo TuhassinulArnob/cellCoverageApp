@@ -74,4 +74,12 @@ class CsvExporterTest {
         assertEquals("", parts[7]) // CINR
         assertEquals("0", parts[8]) // HO Trigger
     }
+
+    @Test
+    fun testCsvEscaping() {
+        assertEquals("normal_text", com.cellscope.drive.export.CsvExporter.escapeCsv("normal_text"))
+        assertEquals("\"text,with,commas\"", com.cellscope.drive.export.CsvExporter.escapeCsv("text,with,commas"))
+        assertEquals("\"text with \"\"quotes\"\"\"", com.cellscope.drive.export.CsvExporter.escapeCsv("text with \"quotes\""))
+        assertEquals("\"line1\nline2\"", com.cellscope.drive.export.CsvExporter.escapeCsv("line1\nline2"))
+    }
 }

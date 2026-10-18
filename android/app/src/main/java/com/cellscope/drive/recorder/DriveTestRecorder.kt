@@ -2,37 +2,46 @@ package com.cellscope.drive.recorder
 
 import android.content.Context
 import android.util.Log
+import com.cellscope.drive.analytics.CallDropRiskEngine
+import com.cellscope.drive.analytics.NetworkContinuityAnalyzer
+import com.cellscope.drive.analytics.ServiceHoleDetector
 import com.cellscope.drive.data.db.CellScopeDatabase
 import com.cellscope.drive.data.entity.CellTransitionEntity
 import com.cellscope.drive.data.entity.DriveSession
 import com.cellscope.drive.data.entity.LteMeasurementEntity
+import com.cellscope.drive.data.entity.NetworkContinuityEventEntity
 import com.cellscope.drive.location.LocationTracker
 import com.cellscope.drive.model.GpsData
 import com.cellscope.drive.model.LteMetrics
+import com.cellscope.drive.model.NetworkGeneration
 import com.cellscope.drive.model.RecordingState
 import com.cellscope.drive.telephony.TelephonyCollector
+import com.cellscope.drive.util.TelecomTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.max
 
-class DriveTestRecorder(
-    private val context: Context,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
-) {
+class DriveTestRecorder private constructor(private val context: Context) {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     val database = CellScopeDatabase.getDatabase(context)
     private val sessionDao = database.sessionDao()
     private val measurementDao = database.measurementDao()
     private val transitionDao = database.transitionDao()
+    private val continuityDao = database.continuityDao()
+    private val callReliabilityDao = database.callReliabilityDao()
 
     private val _recordingState = MutableStateFlow(RecordingState.IDLE)
     val recordingState: StateFlow<RecordingState> = _recordingState.asStateFlow()
@@ -42,6 +51,9 @@ class DriveTestRecorder(
 
     private val _sampleCount = MutableStateFlow(0)
     val sampleCount: StateFlow<Int> = _sampleCount.asStateFlow()
+
+    private val _elapsedSeconds = MutableStateFlow(0L)
+    val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
 
     private val _latestGps = MutableStateFlow(GpsData())
     val latestGps: StateFlow<GpsData> = _latestGps.asStateFlow()
@@ -58,9 +70,13 @@ class DriveTestRecorder(
     }
 
     private var sampleJob: Job? = null
+    private var timerJob: Job? = null
     private var lastRecordedPci: Int? = null
     private var lastRecordedRsrp: Int? = null
     private var lastRecordedTac: Int? = null
+    private var lastRecordedGen: NetworkGeneration? = null
+    private var lastRecordedTech: String? = null
+    private var lastCallState: String? = null
     private var maxRecordedSpeedKmh: Float = 0f
     private var rsrpSum: Long = 0L
     private var rsrpCount: Int = 0
@@ -71,12 +87,39 @@ class DriveTestRecorder(
         timeZone = java.util.TimeZone.getTimeZone("UTC")
     }
 
+    private val _recoveredOrphanedSession = MutableStateFlow<DriveSession?>(null)
+    val recoveredOrphanedSession: StateFlow<DriveSession?> = _recoveredOrphanedSession.asStateFlow()
+
+    private val isStopping = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    fun checkAndRecoverActiveSession() {
+        if (_recordingState.value != RecordingState.IDLE) return
+        scope.launch(Dispatchers.IO) {
+            val unfinalized = sessionDao.getActiveSession()
+            if (unfinalized != null) {
+                val latestMeasurement = measurementDao.getLatestForSession(unfinalized.id)
+                val count = measurementDao.getCountForSession(unfinalized.id)
+                val finishTime = latestMeasurement?.timestampMs ?: unfinalized.startTimeMs
+
+                unfinalized.endTimeMs = finishTime
+                unfinalized.sampleCount = count
+                sessionDao.updateSession(unfinalized)
+                Log.i("DriveTestRecorder", "Recovered unfinalized session: ${unfinalized.sessionName} (id=${unfinalized.id}) with $count samples")
+                _recoveredOrphanedSession.value = unfinalized
+            }
+        }
+    }
+
+    fun clearRecoveredSession() {
+        _recoveredOrphanedSession.value = null
+    }
+
     fun startRecording(customSessionName: String? = null) {
         if (_recordingState.value == RecordingState.RECORDING) return
 
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             val now = System.currentTimeMillis()
-            val name = customSessionName ?: "Drive_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(now))}"
+            val name = customSessionName ?: "Survey_${TelecomTimeUtils.formatBdtFilename(now)}"
             val session = DriveSession(
                 sessionName = name,
                 startTimeMs = now
@@ -86,10 +129,14 @@ class DriveTestRecorder(
 
             _currentSession.value = created
             _sampleCount.value = 0
+            _elapsedSeconds.value = 0L
             _recordingState.value = RecordingState.RECORDING
             lastRecordedPci = null
             lastRecordedRsrp = null
             lastRecordedTac = null
+            lastRecordedGen = null
+            lastRecordedTech = null
+            lastCallState = null
             maxRecordedSpeedKmh = 0f
             rsrpSum = 0L
             rsrpCount = 0
@@ -97,43 +144,100 @@ class DriveTestRecorder(
             locationTracker.resetDistance()
             locationTracker.startTracking()
             startSamplingLoop(sessionId)
+            startTimerLoop()
         }
     }
 
     fun pauseRecording() {
         if (_recordingState.value != RecordingState.RECORDING) return
         _recordingState.value = RecordingState.PAUSED
+        locationTracker.pauseTracking()
         sampleJob?.cancel()
+        timerJob?.cancel()
     }
 
     fun resumeRecording() {
         if (_recordingState.value != RecordingState.PAUSED) return
         val current = _currentSession.value ?: return
         _recordingState.value = RecordingState.RECORDING
+        locationTracker.resumeTracking()
         startSamplingLoop(current.id)
+        startTimerLoop()
     }
 
     fun stopRecording(onFinished: ((DriveSession?) -> Unit)? = null) {
         if (_recordingState.value == RecordingState.IDLE) return
+        if (!isStopping.compareAndSet(false, true)) return
 
         sampleJob?.cancel()
+        timerJob?.cancel()
         locationTracker.stopTracking()
 
-        scope.launch {
-            val current = _currentSession.value
-            if (current != null) {
-                current.endTimeMs = System.currentTimeMillis()
-                current.sampleCount = _sampleCount.value
-                current.totalDistanceM = locationTracker.latestGpsData.cumulativeDistanceM
-                current.maxSpeedKmh = maxRecordedSpeedKmh
-                current.avgRsrpDbm = if (rsrpCount > 0) rsrpSum.toDouble() / rsrpCount else null
-                sessionDao.updateSession(current)
+        scope.launch(Dispatchers.IO) {
+            val finalizedSession: DriveSession? = try {
+                val current = _currentSession.value
+                if (current != null) {
+                    val finishTime = System.currentTimeMillis()
+                    current.endTimeMs = finishTime
+                    current.sampleCount = _sampleCount.value
+                    val filteredDist = locationTracker.cumulativeDistanceMeters
+                    val filteredMaxSpeed = locationTracker.maxFilteredSpeedKmh.coerceAtLeast(maxRecordedSpeedKmh)
+                    val isStationarySession = locationTracker.isStationary || filteredDist < 15.0
+
+                    current.totalDistanceM = if (isStationarySession && filteredDist < 15.0) 0.0 else filteredDist
+                    current.maxSpeedKmh = if (isStationarySession && filteredDist < 15.0) 0f else filteredMaxSpeed
+                    current.avgRsrpDbm = if (rsrpCount > 0) rsrpSum.toDouble() / rsrpCount else null
+
+                    // Compute and store session-level QoE KPIs
+                    val measurements = measurementDao.getMeasurementsForSession(current.id)
+                    val activeTests = database.qoeDao().getTestsForSession(current.id)
+                    val qoeReport = com.cellscope.drive.analytics.qoe.QoeAnalyzer.analyzeSessionQoe(
+                        current,
+                        measurements,
+                        activeTests
+                    )
+                    current.gpsAvailabilityPct = qoeReport.gpsAvailabilityPct.toFloat()
+                    current.radioAvailabilityPct = qoeReport.radioAvailabilityPct.toFloat()
+                    current.avgLatencyMs = qoeReport.activeQoeSummary?.avgLatencyMs
+                    current.downloadThroughputMbps = qoeReport.activeQoeSummary?.avgDownloadThroughputMbps
+                    current.uploadThroughputMbps = qoeReport.activeQoeSummary?.avgUploadThroughputMbps
+
+                    // Reconcile and persist service holes
+                    val continuitySummary = NetworkContinuityAnalyzer.analyzeSessionContinuity(current.id, measurements)
+                    val holeSummary = ServiceHoleDetector.detectHoles(
+                        sessionId = current.id,
+                        measurements = measurements,
+                        activeTests = activeTests,
+                        continuityEvents = continuitySummary.continuityEvents
+                    )
+                    continuityDao.insertServiceHoles(holeSummary.holes)
+
+                    sessionDao.updateSession(current)
+                    current
+                } else null
+            } catch (e: Exception) {
+                Log.e("DriveTestRecorder", "Error finalizing survey session", e)
+                _currentSession.value
+            } finally {
+                _recordingState.value = RecordingState.IDLE
+                _elapsedSeconds.value = 0L
+                _currentSession.value = null
+                isStopping.set(false)
             }
 
-            _recordingState.value = RecordingState.IDLE
-            val finished = _currentSession.value
-            _currentSession.value = null
-            onFinished?.invoke(finished)
+            withContext(Dispatchers.Main) {
+                onFinished?.invoke(finalizedSession)
+            }
+        }
+    }
+
+    private fun startTimerLoop() {
+        timerJob?.cancel()
+        timerJob = scope.launch(Dispatchers.Default) {
+            while (isActive && _recordingState.value == RecordingState.RECORDING) {
+                delay(1000L)
+                _elapsedSeconds.value += 1L
+            }
         }
     }
 
@@ -146,8 +250,8 @@ class DriveTestRecorder(
                     val metrics = telephonyCollector.sampleCurrentMetrics()
                     val gps = locationTracker.latestGpsData
 
-                    // Update max speed
-                    if (gps.speedKmh != null && gps.speedKmh > maxRecordedSpeedKmh) {
+                    // Update max speed from quality-filtered observations when genuine movement is confirmed
+                    if (!gps.isStationary && gps.speedKmh != null && gps.speedKmh > maxRecordedSpeedKmh) {
                         maxRecordedSpeedKmh = gps.speedKmh
                     }
 
@@ -157,14 +261,17 @@ class DriveTestRecorder(
                         rsrpCount++
                     }
 
-                    // Detect PCI transition (Serving cell handover trigger indication)
+                    val now = System.currentTimeMillis()
+                    val isoTimestamp = TelecomTimeUtils.formatIsoUtc(now)
+
+                    // 1. Detect PCI transition (Serving cell handover trigger indication)
                     var hoTrigger = 0
                     var transType: String? = null
 
                     if (metrics.servingPci != null) {
                         if (lastRecordedPci != null && lastRecordedPci != metrics.servingPci) {
                             hoTrigger = 1
-                            val isStationary = (gps.speedKmh ?: 0f) < 4.0f
+                            val isStationary = gps.isStationary || (gps.speedKmh ?: 0f) < 2.5f
                             val isSignalDrop = (lastRecordedRsrp ?: -90) < -115
 
                             transType = when {
@@ -173,9 +280,6 @@ class DriveTestRecorder(
                                 lastRecordedTac != null && metrics.tac != null && lastRecordedTac != metrics.tac -> "CONFIRMED_HANDOVER"
                                 else -> "OBSERVED_TRANSITION"
                             }
-
-                            val now = System.currentTimeMillis()
-                            val isoTimestamp = isoDateFormat.format(Date(now))
 
                             // Persist transition event
                             transitionDao.insertTransition(
@@ -203,10 +307,48 @@ class DriveTestRecorder(
                         lastRecordedTac = metrics.tac
                     }
 
-                    val now = System.currentTimeMillis()
-                    val isoTimestamp = isoDateFormat.format(Date(now))
+                    // 2. Detect Generation continuity transition (e.g. 5G -> 4G -> 3G -> 2G or Out of Service)
+                    if (lastRecordedGen != null && lastRecordedGen != metrics.networkGen) {
+                        val category = when {
+                            metrics.networkGen == NetworkGeneration.OUT_OF_SERVICE -> "OUT_OF_SERVICE"
+                            lastRecordedGen == NetworkGeneration.OUT_OF_SERVICE && metrics.networkGen.isCellularService -> "RECOVERY"
+                            lastRecordedGen!!.generationRank > metrics.networkGen.generationRank -> "DOWNGRADE"
+                            lastRecordedGen!!.generationRank < metrics.networkGen.generationRank -> "UPGRADE"
+                            else -> "GENERATION_CHANGE"
+                        }
+                        val evidenceClass = when {
+                            category == "OUT_OF_SERVICE" -> "CONFIRMED_OUT_OF_SERVICE"
+                            category == "RECOVERY" -> "SERVICE_RECOVERY"
+                            category == "DOWNGRADE" && (lastRecordedRsrp ?: 0) < -115 -> "COVERAGE_HOLE_DOWNGRADE"
+                            category == "DOWNGRADE" && (lastRecordedRsrp ?: -100) >= -95 -> "Network generation change — cause unconfirmed"
+                            else -> "CELLULAR_RESELECTION"
+                        }
+                        continuityDao.insertContinuityEvent(
+                            NetworkContinuityEventEntity(
+                                sessionId = sessionId,
+                                timestampIso = isoTimestamp,
+                                timestampMs = now,
+                                latitude = if (gps.hasFix && gps.isValid) gps.latitude else null,
+                                longitude = if (gps.hasFix && gps.isValid) gps.longitude else null,
+                                accuracyM = gps.accuracyM,
+                                fromGeneration = lastRecordedGen!!.code,
+                                toGeneration = metrics.networkGen.code,
+                                fromTech = lastRecordedTech,
+                                toTech = metrics.dataNetworkType,
+                                transitionCategory = category,
+                                fromSignalDbm = lastRecordedRsrp,
+                                toSignalDbm = metrics.rsrpDbm,
+                                durationSeconds = null,
+                                dataConnectivityState = metrics.dataState,
+                                evidenceClassification = evidenceClass,
+                                details = "Generation transition from ${lastRecordedGen!!.code} to ${metrics.networkGen.code} ($category)"
+                            )
+                        )
+                    }
+                    lastRecordedGen = metrics.networkGen
+                    lastRecordedTech = metrics.dataNetworkType
 
-                    // Serialize neighbor cells
+                    // 3. Serialize neighbor cells
                     val neighborsJson = if (metrics.neighborCells.isNotEmpty()) {
                         metrics.neighborCells.joinToString(";") { cell ->
                             "${cell.pci}:${cell.rsrpDbm ?: ""}:${cell.rsrqDb ?: ""}:${cell.earfcn ?: ""}"
@@ -217,8 +359,8 @@ class DriveTestRecorder(
                         sessionId = sessionId,
                         timestampIso = isoTimestamp,
                         timestampMs = now,
-                        latitude = if (gps.hasFix) gps.latitude else null,
-                        longitude = if (gps.hasFix) gps.longitude else null,
+                        latitude = if (gps.hasFix && gps.isValid) gps.latitude else null,
+                        longitude = if (gps.hasFix && gps.isValid) gps.longitude else null,
                         altitudeM = gps.altitudeM,
                         accuracyM = gps.accuracyM,
                         speedKmh = gps.speedKmh,
@@ -241,8 +383,36 @@ class DriveTestRecorder(
                         eci = metrics.eci,
                         neighborCellsJson = neighborsJson,
                         transitionType = transType,
-                        isGpsValid = gps.isValid
+                        isGpsValid = gps.isValid,
+                        nci = metrics.nci,
+                        nrArfcn = metrics.nrArfcn,
+                        csiRsrp = metrics.csiRsrpDbm,
+                        csiSinr = metrics.csiSinrDb,
+                        dataNetworkType = metrics.dataNetworkType,
+                        voiceNetworkType = metrics.voiceNetworkType,
+                        networkGen = metrics.networkGen.code,
+                        serviceState = metrics.serviceState,
+                        dataActivityState = metrics.dataState,
+                        headingDeg = gps.deviceHeadingDeg,
+                        magneticHeadingDeg = gps.magneticHeadingDeg,
+                        headingAccuracyDeg = gps.headingAccuracyDeg,
+                        orientationSensorType = gps.orientationSensorType,
+                        headingValid = gps.isHeadingCalibrated
                     )
+
+                    // 4. Detect Call State transition
+                    if (lastCallState != null && lastCallState != metrics.callState) {
+                        val callEvent = CallDropRiskEngine.classifyCallEvent(
+                            sessionId = sessionId,
+                            timestampIso = isoTimestamp,
+                            timestampMs = now,
+                            previousCallState = lastCallState!!,
+                            newCallState = metrics.callState,
+                            currentMeasurement = record
+                        )
+                        callReliabilityDao.insertCallEvent(callEvent)
+                    }
+                    lastCallState = metrics.callState
 
                     measurementDao.insertMeasurement(record)
                     _sampleCount.value += 1
@@ -251,6 +421,19 @@ class DriveTestRecorder(
                 }
 
                 delay(samplingIntervalMs)
+            }
+        }
+    }
+
+    companion object {
+        @Volatile
+        private var INSTANCE: DriveTestRecorder? = null
+
+        fun getInstance(context: Context): DriveTestRecorder {
+            return INSTANCE ?: synchronized(this) {
+                val instance = DriveTestRecorder(context.applicationContext)
+                INSTANCE = instance
+                instance
             }
         }
     }

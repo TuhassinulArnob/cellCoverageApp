@@ -13,6 +13,7 @@ class CellScopeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.cellscope.drive.ui.theme.AppThemeManager.applySavedTheme(this)
         MapLibre.getInstance(this)
         try {
             HttpRequestUtil.setPrintRequestUrlOnFailure(true)

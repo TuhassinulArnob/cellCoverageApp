@@ -4,16 +4,21 @@ import { MapView } from './components/MapView';
 import { SummaryStats } from './components/SummaryStats';
 import { MeasurementTable } from './components/MeasurementTable';
 import { FileUpload } from './components/FileUpload';
+import { EventsAndAnomalies } from './components/EventsAndAnomalies';
+import { DataQualityPanel } from './components/DataQualityPanel';
+import { ReportExporter } from './components/ReportExporter';
 import type {
   AvailableDatasetInfo,
   DatasetSummary,
   MeasurementPoint,
+  ExtendedDatasetAnalysis,
 } from './types/cellscope';
 import {
   fetchAvailableDatasets,
   loadPresetDataset,
   uploadCsvFile,
   fetchMeasurements,
+  fetchExtendedAnalysis,
 } from './services/api';
 import { Loader2 } from 'lucide-react';
 
@@ -21,6 +26,7 @@ export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('map');
   const [summary, setSummary] = useState<DatasetSummary | null>(null);
   const [measurements, setMeasurements] = useState<MeasurementPoint[]>([]);
+  const [extendedAnalysis, setExtendedAnalysis] = useState<ExtendedDatasetAnalysis | null>(null);
   const [availablePresets, setAvailablePresets] = useState<AvailableDatasetInfo[]>([]);
   const [selectedCellId, setSelectedCellId] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -42,6 +48,9 @@ export const App: React.FC = () => {
 
         const allPoints = await fetchMeasurements({ gpsOnly: false });
         setMeasurements(allPoints);
+
+        const ext = await fetchExtendedAnalysis();
+        setExtendedAnalysis(ext);
       } catch (err: any) {
         console.error('Initialization error:', err);
         setError(err.message || 'Failed to initialize CellScope');
@@ -63,6 +72,9 @@ export const App: React.FC = () => {
 
       const allPoints = await fetchMeasurements({ gpsOnly: false });
       setMeasurements(allPoints);
+
+      const ext = await fetchExtendedAnalysis();
+      setExtendedAnalysis(ext);
 
       // If dataset has GPS, switch to map; otherwise switch to analytics
       if (res.summary.has_gps) {
@@ -87,6 +99,9 @@ export const App: React.FC = () => {
 
       const allPoints = await fetchMeasurements({ gpsOnly: false });
       setMeasurements(allPoints);
+
+      const ext = await fetchExtendedAnalysis();
+      setExtendedAnalysis(ext);
 
       if (res.summary.has_gps) {
         setCurrentTab('map');
@@ -132,8 +147,20 @@ export const App: React.FC = () => {
               <SummaryStats summary={summary} />
             )}
 
+            {currentTab === 'events' && (
+              <EventsAndAnomalies analysis={extendedAnalysis} />
+            )}
+
+            {currentTab === 'quality' && (
+              <DataQualityPanel analysis={extendedAnalysis} />
+            )}
+
             {currentTab === 'table' && (
               <MeasurementTable measurements={measurements} />
+            )}
+
+            {currentTab === 'report' && (
+              <ReportExporter summary={summary} analysis={extendedAnalysis} />
             )}
 
             {currentTab === 'import' && (
@@ -155,11 +182,11 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-400">CellScope RAN Analytics Platform</span>
             <span>•</span>
-            <span>3GPP TS 36.133 Compliant IE Conversion</span>
+            <span>3GPP TS 36.133 / TS 38.133 Compliance</span>
             <span>•</span>
-            <span>Urban LTE Mobility Dataset (Dhaka)</span>
+            <span>Lead: Sarkar Tuhassinul Arnob</span>
           </div>
-          <div>Phase 1 MVP Active: CSV Ingestion, 3GPP Validation & Interactive GPS Map</div>
+          <div>Unified Telecom Dashboard: Interactive Map, RF Analytics, Anomaly Detection & Canonical CSV Preservation</div>
         </div>
       </footer>
     </div>

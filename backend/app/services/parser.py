@@ -37,6 +37,27 @@ CANONICAL_FIELD_PATTERNS = {
     "handover_trigger": [
         r"^handover\s+trigger\s*$", r"^handover_trigger\s*$", r"^ho_trigger\s*$"
     ],
+    "tac": [
+        r"^tac\s*$", r"^tracking_area_code\s*$"
+    ],
+    "earfcn": [
+        r"^earfcn\s*$", r"^arfcn\s*$", r"^channel\s*$", r"^nr_arfcn\s*$"
+    ],
+    "rssi": [
+        r"^rssi\s*\(\s*dbm\s*\)\s*$", r"^rssi\s*$", r"^serving_cell_rssi\s*$"
+    ],
+    "network_type": [
+        r"^network\s+type\s*$", r"^network_type\s*$", r"^tech\s*$", r"^rat\s*$", r"^network_gen\s*$"
+    ],
+    "operator": [
+        r"^operator\s*$", r"^carrier\s*$", r"^network_operator\s*$", r"^operator_alpha\s*$"
+    ],
+    "accuracy": [
+        r"^accuracy\s*\(\s*m\s*\)\s*$", r"^accuracy\s*$", r"^gps_accuracy\s*$", r"^accuracy_m\s*$"
+    ],
+    "heading": [
+        r"^heading\s*\(\s*deg\s*\)\s*$", r"^heading\s*$", r"^bearing\s*$", r"^azimuth\s*$"
+    ],
 }
 
 

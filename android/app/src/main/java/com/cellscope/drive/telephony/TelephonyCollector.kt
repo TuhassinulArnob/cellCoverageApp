@@ -14,7 +14,9 @@ import android.telephony.CellSignalStrengthNr
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.cellscope.drive.model.LteMetrics
+import com.cellscope.drive.model.NetworkGeneration
 import com.cellscope.drive.model.ObservedCell
+import com.cellscope.drive.model.ServingStatus
 
 data class TelephonyDiagnostics(
     val hasTelephonyHardware: Boolean,
@@ -27,7 +29,20 @@ data class TelephonyDiagnostics(
     val supportsNeighborCells: Boolean,
     val supportsSinr: Boolean,
     val supportsTimingAdvance: Boolean,
-    val lastScanTimeMs: Long
+    val lastScanTimeMs: Long,
+    val supports5gNr: Boolean = false,
+    val nrState: String = "LTE_ONLY",
+    val nrPci: Int? = null,
+    val nci: Long? = null,
+    val nrArfcn: Int? = null,
+    val nrAvailabilityState: String = "NOT_CONFIGURED",
+    val secondaryCellsCount: Int = 0,
+    val unconfirmedCellsCount: Int = 0,
+    val voiceNetworkType: String = "UNKNOWN",
+    val serviceState: String = "IN_SERVICE",
+    val dataConnectionState: String = "CONNECTED",
+    val callState: String = "IDLE",
+    val normalizedGen: String = "UNKNOWN"
 )
 
 class TelephonyCollector(
@@ -53,7 +68,13 @@ class TelephonyCollector(
         supportsNeighborCells = false,
         supportsSinr = false,
         supportsTimingAdvance = false,
-        lastScanTimeMs = 0L
+        lastScanTimeMs = 0L,
+        supports5gNr = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+        nrState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "LTE_ONLY" else "UNSUPPORTED",
+        nrPci = null,
+        nci = null,
+        nrArfcn = null,
+        nrAvailabilityState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "NOT_CONFIGURED" else "NO_HARDWARE"
     )
     @Volatile
     private var hasSeenNonZeroRssnr: Boolean = false
@@ -80,7 +101,11 @@ class TelephonyCollector(
     @SuppressLint("MissingPermission")
     fun sampleCurrentMetrics(): LteMetrics {
         if (telephonyManager == null) {
-            val none = LteMetrics(networkType = "NO_TELEPHONY")
+            val none = LteMetrics(
+                networkType = "NO_TELEPHONY",
+                serviceState = "OUT_OF_SERVICE",
+                networkGen = NetworkGeneration.OUT_OF_SERVICE
+            )
             latestMetrics = none
             onMetricsUpdated(none)
             return none
@@ -91,73 +116,166 @@ class TelephonyCollector(
         val netType = getNetworkTypeString()
         val now = System.currentTimeMillis()
 
+        // Read distinct cellular data and voice bearer states
+        val dataNetInt = try {
+            telephonyManager.dataNetworkType
+        } catch (_: Exception) {
+            0
+        }
+
+        val voiceNetInt = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                telephonyManager.voiceNetworkType
+            } else {
+                0
+            }
+        } catch (_: Exception) {
+            0
+        }
+
+        val rawServiceState = try {
+            telephonyManager.serviceState?.state
+        } catch (_: Exception) {
+            null
+        }
+        val serviceStateStr = NetworkGeneration.getServiceStateName(rawServiceState)
+
+        val rawDataState = try {
+            telephonyManager.dataState
+        } catch (_: Exception) {
+            null
+        }
+        val dataStateStr = NetworkGeneration.getDataStateName(rawDataState)
+
+        val rawCallState = try {
+            telephonyManager.callState
+        } catch (_: Exception) {
+            null
+        }
+        val callStateStr = NetworkGeneration.getCallStateName(rawCallState)
+
         try {
             val cellInfoList: List<CellInfo>? = telephonyManager.allCellInfo
 
             if (cellInfoList.isNullOrEmpty()) {
+                val detailedDataTech = NetworkGeneration.getDetailedTechName(dataNetInt)
+                val detailedVoiceTech = NetworkGeneration.getDetailedTechName(voiceNetInt)
+                val normalizedGen = if (serviceStateStr == "OUT_OF_SERVICE" || serviceStateStr == "POWER_OFF") {
+                    NetworkGeneration.OUT_OF_SERVICE
+                } else {
+                    NetworkGeneration.fromNetworkType(dataNetInt)
+                }
+
                 val fallback = LteMetrics(
                     networkType = netType,
                     operatorAlpha = operatorName,
                     operatorNumeric = operatorNumeric,
-                    timestampMs = now
+                    timestampMs = now,
+                    dataNetworkType = detailedDataTech,
+                    voiceNetworkType = detailedVoiceTech,
+                    networkGen = normalizedGen,
+                    serviceState = serviceStateStr,
+                    dataState = dataStateStr,
+                    callState = callStateStr
                 )
                 latestMetrics = fallback
-                updateDiagnostics(emptyList(), operatorName, netType, now)
+                updateDiagnostics(emptyList(), operatorName, netType, now, detailedVoiceTech, serviceStateStr, dataStateStr, callStateStr, normalizedGen.code)
                 onMetricsUpdated(fallback)
                 return fallback
             }
 
-            val observedCells = mutableListOf<ObservedCell>()
-            var primaryServingCell: ObservedCell? = null
+            val rawCandidates = mutableListOf<RawCellCandidate>()
 
             for (info in cellInfoList) {
-                val parsed = parseCellInfo(info, operatorName, operatorNumeric, now)
-                if (parsed != null) {
-                    observedCells.add(parsed)
-                    if (parsed.isServing && primaryServingCell == null) {
-                        primaryServingCell = parsed
-                    }
+                val candidate = parseCellCandidate(info, operatorName, operatorNumeric, now)
+                if (candidate != null) {
+                    rawCandidates.add(candidate)
                 }
             }
 
-            // If no registered cell was explicitly marked, pick first available with valid signal
-            if (primaryServingCell == null && observedCells.isNotEmpty()) {
-                primaryServingCell = observedCells.firstOrNull { it.rsrpDbm != null } ?: observedCells.first()
+            // Authoritatively classify serving status across all scanned cells
+            val observedCells = ServingCellClassifier.classify(rawCandidates)
+
+            // Primary serving cell is the single authoritative PCell
+            val primaryServingCell = observedCells.firstOrNull { it.servingStatus == ServingStatus.PRIMARY_SERVING }
+            val neighborList = observedCells.filter { it.servingStatus == ServingStatus.NEIGHBOR }
+
+            // Determine 5G NR architecture and availability state
+            val nrCells = observedCells.filter { it.networkType == "5G_NR" }
+            val primaryIsNr = primaryServingCell?.networkType == "5G_NR"
+            val hasNrCell = nrCells.isNotEmpty()
+            val netIsNr = netType == "5G_NR"
+
+            val nrState = when {
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> "UNSUPPORTED"
+                primaryIsNr -> "SA"
+                hasNrCell || netIsNr -> "NSA"
+                else -> "LTE_ONLY"
             }
 
-            val neighborList = observedCells.filter { it != primaryServingCell }
+            val nrAvailabilityState = when (nrState) {
+                "SA", "NSA" -> "CONNECTED"
+                "LTE_ONLY" -> "NOT_CONFIGURED"
+                else -> "NO_HARDWARE"
+            }
 
-            val serving = primaryServingCell ?: ObservedCell(
-                pci = null,
-                networkType = netType,
-                operatorAlpha = operatorName,
-                operatorNumeric = operatorNumeric,
-                timestampMs = now
-            )
+            val bestNrCell = nrCells.maxByOrNull { it.rsrpDbm ?: -999 }
+            val effectiveNci = if (primaryIsNr) primaryServingCell?.nci else bestNrCell?.nci
+            val effectiveNrArfcn = if (primaryIsNr) primaryServingCell?.nrArfcn else bestNrCell?.nrArfcn
+            val effectiveCsiRsrp = if (primaryIsNr) primaryServingCell?.csiRsrpDbm else bestNrCell?.csiRsrpDbm
+            val effectiveCsiRsrq = if (primaryIsNr) primaryServingCell?.csiRsrqDb else bestNrCell?.csiRsrqDb
+            val effectiveCsiSinr = if (primaryIsNr) primaryServingCell?.csiSinrDb else bestNrCell?.csiSinrDb
+
+            val detailedDataTech = NetworkGeneration.getDetailedTechName(dataNetInt, nrState)
+            val detailedVoiceTech = NetworkGeneration.getDetailedTechName(voiceNetInt)
+
+            val normalizedGen = if (serviceStateStr == "OUT_OF_SERVICE" || serviceStateStr == "POWER_OFF") {
+                NetworkGeneration.OUT_OF_SERVICE
+            } else {
+                val genFromCell = primaryServingCell?.networkType?.let { NetworkGeneration.fromString(it) }
+                if (genFromCell != null && genFromCell != NetworkGeneration.UNKNOWN) {
+                    if (genFromCell == NetworkGeneration.GEN_4G && nrState == "NSA") NetworkGeneration.GEN_5G else genFromCell
+                } else {
+                    NetworkGeneration.fromNetworkType(dataNetInt, nrState)
+                }
+            }
 
             val metrics = LteMetrics(
-                networkType = serving.networkType,
-                operatorAlpha = serving.operatorAlpha ?: operatorName,
-                operatorNumeric = serving.operatorNumeric ?: operatorNumeric,
-                servingPci = serving.pci,
-                tac = serving.tac,
-                earfcn = serving.earfcn,
-                bandwidthKhz = serving.bandwidthKhz,
-                rsrpDbm = serving.rsrpDbm,
-                rsrqDb = serving.rsrqDb,
-                rssiDbm = serving.rssiDbm,
-                sinrDb = serving.sinrDb,
-                eci = serving.eci,
-                cqi = serving.cqi,
-                timingAdvance = serving.timingAdvance,
-                isServing = serving.isServing,
+                networkType = primaryServingCell?.networkType ?: netType,
+                operatorAlpha = primaryServingCell?.operatorAlpha ?: operatorName,
+                operatorNumeric = primaryServingCell?.operatorNumeric ?: operatorNumeric,
+                servingPci = primaryServingCell?.pci,
+                tac = primaryServingCell?.tac,
+                earfcn = primaryServingCell?.earfcn,
+                bandwidthKhz = primaryServingCell?.bandwidthKhz,
+                rsrpDbm = primaryServingCell?.rsrpDbm,
+                rsrqDb = primaryServingCell?.rsrqDb,
+                rssiDbm = primaryServingCell?.rssiDbm,
+                sinrDb = primaryServingCell?.sinrDb,
+                eci = primaryServingCell?.eci,
+                cqi = primaryServingCell?.cqi,
+                timingAdvance = primaryServingCell?.timingAdvance,
+                isServing = primaryServingCell != null,
                 neighborCells = neighborList,
                 allCells = observedCells,
-                timestampMs = now
+                nci = effectiveNci,
+                nrArfcn = effectiveNrArfcn,
+                csiRsrpDbm = effectiveCsiRsrp,
+                csiRsrqDb = effectiveCsiRsrq,
+                csiSinrDb = effectiveCsiSinr,
+                nrState = nrState,
+                nrAvailabilityState = nrAvailabilityState,
+                timestampMs = now,
+                dataNetworkType = detailedDataTech,
+                voiceNetworkType = detailedVoiceTech,
+                networkGen = normalizedGen,
+                serviceState = serviceStateStr,
+                dataState = dataStateStr,
+                callState = callStateStr
             )
 
             latestMetrics = metrics
-            updateDiagnostics(observedCells, operatorName, netType, now)
+            updateDiagnostics(observedCells, operatorName, netType, now, detailedVoiceTech, serviceStateStr, dataStateStr, callStateStr, normalizedGen.code)
             onMetricsUpdated(metrics)
             return metrics
 
@@ -171,19 +289,28 @@ class TelephonyCollector(
             networkType = netType,
             operatorAlpha = operatorName,
             operatorNumeric = operatorNumeric,
-            timestampMs = now
+            timestampMs = now,
+            serviceState = serviceStateStr,
+            dataState = dataStateStr,
+            callState = callStateStr
         )
         latestMetrics = empty
         onMetricsUpdated(empty)
         return empty
     }
 
-    private fun parseCellInfo(
+    private fun parseCellCandidate(
         info: CellInfo,
         operatorName: String?,
         operatorNumeric: String?,
         timestampMs: Long
-    ): ObservedCell? {
+    ): RawCellCandidate? {
+        val rawConnStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.cellConnectionStatus
+        } else {
+            RawCellCandidate.CONNECTION_UNKNOWN
+        }
+
         when {
             info is CellInfoLte -> {
                 val identity = info.cellIdentity
@@ -215,8 +342,6 @@ class TelephonyCollector(
                             hasSeenNonZeroRssnr = true
                             rawRssnr / 10.0
                         } else {
-                            // If modem returns 0 constantly (e.g. MediaTek RIL default), only treat as 0.0 dB
-                            // if device has actively demonstrated non-zero SINR reporting capability
                             if (hasSeenNonZeroRssnr) 0.0 else null
                         }
                     } else null
@@ -225,7 +350,7 @@ class TelephonyCollector(
                 val cqi = signal.cqi.takeIf { it in 1..15 }
                 val ta = signal.timingAdvance.takeIf { it in 0..1282 }
 
-                return ObservedCell(
+                return RawCellCandidate(
                     pci = pci,
                     tac = tac,
                     eci = eci,
@@ -237,7 +362,8 @@ class TelephonyCollector(
                     sinrDb = sinr,
                     cqi = cqi,
                     timingAdvance = ta,
-                    isServing = info.isRegistered,
+                    isRegistered = info.isRegistered,
+                    connectionStatus = rawConnStatus,
                     networkType = "LTE",
                     operatorAlpha = operatorName,
                     operatorNumeric = operatorNumeric,
@@ -250,17 +376,28 @@ class TelephonyCollector(
                 val identity = info.cellIdentity as? android.telephony.CellIdentityNr
                 val pci = identity?.pci?.takeIf { it in 0..1007 }
                 val tac = identity?.tac?.takeIf { it in 1..16777214 }
-                val rsrp = signal?.ssRsrp?.takeIf { it in -156..-31 }
-                val rsrq = signal?.ssRsrq?.takeIf { it in -43..20 }
-                val sinr = signal?.ssSinr?.takeIf { it in -23..40 }?.toDouble()
+                val nci = identity?.nci?.takeIf { it in 1L..68719476735L }
+                val nrArfcn = identity?.nrarfcn?.takeIf { it in 0..3279165 }
+                val ssRsrp = signal?.ssRsrp?.takeIf { it in -156..-31 }
+                val ssRsrq = signal?.ssRsrq?.takeIf { it in -43..20 }
+                val ssSinr = signal?.ssSinr?.takeIf { it in -23..40 }?.toDouble()
+                val csiRsrp = signal?.csiRsrp?.takeIf { it in -156..-31 }
+                val csiRsrq = signal?.csiRsrq?.takeIf { it in -43..20 }
+                val csiSinr = signal?.csiSinr?.takeIf { it in -23..40 }?.toDouble()
 
-                return ObservedCell(
+                return RawCellCandidate(
                     pci = pci,
                     tac = tac,
-                    rsrpDbm = rsrp,
-                    rsrqDb = rsrq,
-                    sinrDb = sinr,
-                    isServing = info.isRegistered,
+                    nci = nci,
+                    nrArfcn = nrArfcn,
+                    rsrpDbm = ssRsrp ?: csiRsrp,
+                    rsrqDb = ssRsrq ?: csiRsrq,
+                    sinrDb = ssSinr ?: csiSinr,
+                    csiRsrpDbm = csiRsrp,
+                    csiRsrqDb = csiRsrq,
+                    csiSinrDb = csiSinr,
+                    isRegistered = info.isRegistered,
+                    connectionStatus = rawConnStatus,
                     networkType = "5G_NR",
                     operatorAlpha = operatorName,
                     operatorNumeric = operatorNumeric,
@@ -271,10 +408,11 @@ class TelephonyCollector(
             info is CellInfoWcdma -> {
                 val sig = info.cellSignalStrength
                 val rscp = sig.dbm.takeIf { it in -120..-24 }
-                return ObservedCell(
+                return RawCellCandidate(
                     pci = info.cellIdentity.psc.takeIf { it in 0..511 },
                     rsrpDbm = rscp,
-                    isServing = info.isRegistered,
+                    isRegistered = info.isRegistered,
+                    connectionStatus = rawConnStatus,
                     networkType = "3G_WCDMA",
                     operatorAlpha = operatorName,
                     operatorNumeric = operatorNumeric,
@@ -285,10 +423,11 @@ class TelephonyCollector(
             info is CellInfoGsm -> {
                 val sig = info.cellSignalStrength
                 val dbm = sig.dbm.takeIf { it in -113..-51 }
-                return ObservedCell(
+                return RawCellCandidate(
                     pci = null,
                     rsrpDbm = dbm,
-                    isServing = info.isRegistered,
+                    isRegistered = info.isRegistered,
+                    connectionStatus = rawConnStatus,
                     networkType = "2G_GSM",
                     operatorAlpha = operatorName,
                     operatorNumeric = operatorNumeric,
@@ -304,12 +443,29 @@ class TelephonyCollector(
         cells: List<ObservedCell>,
         operatorName: String?,
         netType: String,
-        timestampMs: Long
+        timestampMs: Long,
+        voiceNetType: String = "UNKNOWN",
+        serviceState: String = "IN_SERVICE",
+        dataState: String = "CONNECTED",
+        callState: String = "IDLE",
+        normalizedGen: String = "UNKNOWN"
     ) {
-        val servingCount = cells.count { it.isServing }
-        val neighborCount = cells.count { !it.isServing }
+        val servingCount = cells.count { it.servingStatus == ServingStatus.PRIMARY_SERVING }
+        val secondaryCount = cells.count { it.servingStatus == ServingStatus.SECONDARY_SERVING }
+        val unconfirmedCount = cells.count { it.servingStatus == ServingStatus.SERVING_UNCONFIRMED }
+        val neighborCount = cells.count { it.servingStatus == ServingStatus.NEIGHBOR }
         val hasSinr = cells.any { it.sinrDb != null }
         val hasTa = cells.any { it.timingAdvance != null }
+        val nrCells = cells.filter { it.networkType == "5G_NR" }
+        val primaryIsNr = cells.any { it.servingStatus == ServingStatus.PRIMARY_SERVING && it.networkType == "5G_NR" }
+        val hasNr = nrCells.isNotEmpty() || netType == "5G_NR"
+        val nrState = when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> "UNSUPPORTED"
+            primaryIsNr -> "SA"
+            hasNr -> "NSA"
+            else -> "LTE_ONLY"
+        }
+        val bestNr = nrCells.firstOrNull()
 
         latestDiagnostics = TelephonyDiagnostics(
             hasTelephonyHardware = true,
@@ -318,11 +474,24 @@ class TelephonyCollector(
             dataNetworkType = netType,
             totalCellsObserved = cells.size,
             servingCellsCount = servingCount,
+            secondaryCellsCount = secondaryCount,
+            unconfirmedCellsCount = unconfirmedCount,
             neighborCellsCount = neighborCount,
             supportsNeighborCells = neighborCount > 0,
             supportsSinr = hasSinr,
             supportsTimingAdvance = hasTa,
-            lastScanTimeMs = timestampMs
+            lastScanTimeMs = timestampMs,
+            supports5gNr = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+            nrState = nrState,
+            nrPci = bestNr?.pci,
+            nci = bestNr?.nci,
+            nrArfcn = bestNr?.nrArfcn,
+            nrAvailabilityState = if (nrState == "SA" || nrState == "NSA") "CONNECTED" else if (nrState == "LTE_ONLY") "NOT_CONFIGURED" else "NO_HARDWARE",
+            voiceNetworkType = voiceNetType,
+            serviceState = serviceState,
+            dataConnectionState = dataState,
+            callState = callState,
+            normalizedGen = normalizedGen
         )
     }
 

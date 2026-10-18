@@ -3,6 +3,14 @@ package com.cellscope.drive.analytics
 import com.cellscope.drive.data.entity.LteMeasurementEntity
 import kotlin.math.*
 
+enum class MapMetricLayer(val displayName: String, val unit: String) {
+    RSRP("RSRP", "dBm"),
+    RSRQ("RSRQ", "dB"),
+    SINR("SINR", "dB"),
+    THROUGHPUT("Throughput", "Mbps"),
+    GENERATION("Generation", "Tech")
+}
+
 data class CoverageCell(
     val lat: Double,
     val lon: Double,
@@ -15,6 +23,14 @@ data class CoverageCell(
     val sampleCount: Int,
     val isDirectlyMeasured: Boolean
 ) {
+    fun getMetricValue(metric: MapMetricLayer): Double? = when (metric) {
+        MapMetricLayer.RSRP -> interpolatedRsrp
+        MapMetricLayer.RSRQ -> interpolatedRsrq
+        MapMetricLayer.SINR -> interpolatedSinr
+        MapMetricLayer.THROUGHPUT -> null
+        MapMetricLayer.GENERATION -> null
+    }
+
     val rsrpRating: String
         get() = when {
             interpolatedRsrp == null -> "NO DATA"

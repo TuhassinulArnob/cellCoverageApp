@@ -13,6 +13,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.cellscope.drive.MainActivity
 import com.cellscope.drive.recorder.DriveTestRecorder
+import kotlinx.coroutines.launch
 
 class DriveTestService : Service() {
 
@@ -24,14 +25,37 @@ class DriveTestService : Service() {
         fun getService(): DriveTestService = this@DriveTestService
     }
 
+    private val serviceJob = kotlinx.coroutines.SupervisorJob()
+    private val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + serviceJob)
+
     override fun onCreate() {
         super.onCreate()
-        recorder = DriveTestRecorder(this)
+        recorder = DriveTestRecorder.getInstance(this)
         createNotificationChannel()
+
+        serviceScope.launch {
+            recorder.sampleCount.collect { count ->
+                val elapsed = recorder.elapsedSeconds.value
+                val mins = elapsed / 60
+                val secs = elapsed % 60
+                val timeStr = String.format(java.util.Locale.US, "%02d:%02d", mins, secs)
+                val statusText = when (recorder.recordingState.value) {
+                    com.cellscope.drive.model.RecordingState.PAUSED -> "Survey Paused"
+                    com.cellscope.drive.model.RecordingState.RECORDING -> "Survey Active"
+                    else -> "Survey Ready"
+                }
+                updateNotificationText("$statusText • $count samples ($timeStr)")
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceJob.cancel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notification = buildNotification("CellScope recording active")
+        val notification = buildNotification("CellScope survey recording active")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {

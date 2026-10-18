@@ -11,6 +11,7 @@ from backend.app.core.schema import (
     MeasurementPoint,
     IngestResponse,
     AvailableDatasetInfo,
+    ExtendedDatasetAnalysis,
 )
 from backend.app.services.parser import parse_csv_to_dataframe
 from backend.app.services.analytics import process_and_summarize_dataset
@@ -190,3 +191,103 @@ def get_current_measurements(
         filtered = filtered[:limit]
 
     return filtered
+
+
+@router.get("/datasets/current/extended-analysis", response_model=ExtendedDatasetAnalysis)
+def get_extended_analysis():
+    """Gets comprehensive telecom analysis including transitions, anomalies, service holes, and data quality."""
+    if not _CURRENT_DATASET_ID or _CURRENT_DATASET_ID not in _DATASET_STORE:
+        load_preset_dataset("bd_ds3_v1")
+
+    dataset_entry = _DATASET_STORE[_CURRENT_DATASET_ID]
+    summary = dataset_entry["summary"]
+    points = dataset_entry["points"]
+
+    from backend.app.services.analytics import compute_extended_analysis
+    return compute_extended_analysis(summary=summary, points=points)
+
+
+@router.get("/datasets/current/export/csv")
+def export_current_dataset_csv(extended: bool = Query(False, description="Export with extended columns")):
+    """
+    Exports the current dataset. Defaults to canonical 14-column CSV format
+    guaranteeing 100% interoperability with external tools and dashboard ingestion.
+    """
+    from fastapi.responses import Response
+    import io
+    import csv
+
+    if not _CURRENT_DATASET_ID or _CURRENT_DATASET_ID not in _DATASET_STORE:
+        load_preset_dataset("bd_ds3_v1")
+
+    dataset_entry = _DATASET_STORE[_CURRENT_DATASET_ID]
+    points: List[MeasurementPoint] = dataset_entry["points"]
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    if not extended:
+        # Canonical 14-column CSV
+        headers = [
+            "Timestamp", "Latitude", "Longitude", "Speed (km/h)",
+            "Serving Cell ID", "Serving Cell RSRP", "Serving Cell RSRQ",
+            "Serving Cell CINR", "Handover Trigger", "TAC", "EARFCN",
+            "RSSI (dBm)", "Network Type", "Operator"
+        ]
+        writer.writerow(headers)
+        for p in points:
+            writer.writerow([
+                p.timestamp_raw,
+                p.latitude if p.latitude is not None else "",
+                p.longitude if p.longitude is not None else "",
+                p.speed_kmh if p.speed_kmh is not None else "",
+                p.serving_cell_id if p.serving_cell_id is not None else "",
+                p.rsrp_dbm if p.rsrp_dbm is not None else "",
+                p.rsrq_db if p.rsrq_db is not None else "",
+                p.cinr_db if p.cinr_db is not None else "",
+                p.handover_trigger,
+                p.tac if p.tac is not None else "",
+                p.earfcn if p.earfcn is not None else "",
+                p.rssi_dbm if p.rssi_dbm is not None else "",
+                p.network_type or p.network_gen or "LTE",
+                p.operator or ""
+            ])
+    else:
+        # Extended 18-column CSV with accuracy, heading, and quality classes
+        headers = [
+            "Timestamp", "Latitude", "Longitude", "Accuracy (m)", "Heading (deg)",
+            "Speed (km/h)", "Serving Cell ID", "Neighbor Cell ID",
+            "Serving Cell RSRP", "RSRP Class", "Serving Cell RSRQ", "RSRQ Class",
+            "Serving Cell CINR", "CINR Class", "Handover Trigger",
+            "TAC", "EARFCN", "Network Gen"
+        ]
+        writer.writerow(headers)
+        for p in points:
+            writer.writerow([
+                p.timestamp_raw,
+                p.latitude if p.latitude is not None else "",
+                p.longitude if p.longitude is not None else "",
+                p.accuracy_m if p.accuracy_m is not None else "",
+                p.heading_deg if p.heading_deg is not None else "",
+                p.speed_kmh if p.speed_kmh is not None else "",
+                p.serving_cell_id if p.serving_cell_id is not None else "",
+                p.neighbor_cell_id if p.neighbor_cell_id is not None else "",
+                p.rsrp_dbm if p.rsrp_dbm is not None else "",
+                p.rsrp_class,
+                p.rsrq_db if p.rsrq_db is not None else "",
+                p.rsrq_class,
+                p.cinr_db if p.cinr_db is not None else "",
+                p.cinr_class,
+                p.handover_trigger,
+                p.tac if p.tac is not None else "",
+                p.earfcn if p.earfcn is not None else "",
+                p.network_gen or "4G LTE"
+            ])
+
+    filename = f"cellscope_{_CURRENT_DATASET_ID}_{'extended' if extended else 'canonical'}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+

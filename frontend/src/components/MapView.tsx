@@ -197,24 +197,52 @@ export const MapView: React.FC<MapViewProps> = ({
     >
       {/* Top Map Controls Bar */}
       <div className="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Metric Switcher */}
-        <div className="pointer-events-auto flex items-center bg-slate-900/90 backdrop-blur-md p-1 rounded-lg border border-slate-700 shadow-lg text-xs font-medium">
-          <span className="px-2 text-slate-400 flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-cyan-400" /> Metric:
-          </span>
-          {(['rsrp', 'rsrq', 'cinr'] as ActiveMetric[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setActiveMetric(m)}
-              className={`px-3 py-1.5 rounded-md uppercase font-semibold transition-all ${
-                activeMetric === m
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              {m === 'rsrp' ? 'RSRP (dBm)' : m === 'rsrq' ? 'RSRQ (dB)' : 'CINR (dB)'}
-            </button>
-          ))}
+        {/* Metric Switcher & KPI Badges */}
+        <div className="pointer-events-auto flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-slate-900/90 backdrop-blur-md p-1 rounded-lg border border-slate-700 shadow-lg text-xs font-medium">
+            <span className="px-2 text-slate-400 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-cyan-400" /> Layer:
+            </span>
+            {(['rsrp', 'rsrq', 'cinr'] as ActiveMetric[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setActiveMetric(m)}
+                className={`px-3 py-1.5 rounded-md uppercase font-semibold transition-all ${
+                  activeMetric === m
+                    ? 'bg-cyan-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {m === 'rsrp' ? 'RSRP (dBm)' : m === 'rsrq' ? 'RSRQ (dB)' : 'CINR (dB)'}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick Route KPIs */}
+          {summary && (
+            <div className="hidden lg:flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-mono text-slate-300 shadow-lg">
+              {summary.total_distance_km !== null && summary.total_distance_km !== undefined && (
+                <div>
+                  <span className="text-slate-500">DIST: </span>
+                  <span className="text-cyan-400 font-bold">{summary.total_distance_km} km</span>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-500">SAMPLES: </span>
+                <span className="text-white font-bold">{validGpsPoints.length}</span>
+              </div>
+              {summary.mean_accuracy_m && (
+                <div>
+                  <span className="text-slate-500">ACC: </span>
+                  <span className="text-emerald-400 font-bold">±{summary.mean_accuracy_m}m</span>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-500">COMPLETENESS: </span>
+                <span className="text-amber-400 font-bold">{summary.data_completeness_pct ?? 100}%</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Filter Controls & Basemap Switcher */}
@@ -324,9 +352,14 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Point Inspector Modal / Card (Bottom Right) */}
       {selectedPoint && (
-        <div className="absolute bottom-4 right-4 z-[1000] bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-slate-700 shadow-2xl text-xs w-80 max-w-[90vw]">
+        <div className="absolute bottom-4 right-4 z-[1000] bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-slate-700 shadow-2xl text-xs w-88 max-w-[92vw]">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
-            <span className="font-bold text-white text-sm">Measurement #{selectedPoint.id}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-sm">Point #{selectedPoint.id}</span>
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800 rounded">
+                {selectedPoint.network_gen || '4G LTE'}
+              </span>
+            </div>
             <button
               onClick={() => setSelectedPoint(null)}
               className="text-slate-400 hover:text-white px-1 font-bold"
@@ -340,47 +373,62 @@ export const MapView: React.FC<MapViewProps> = ({
               <span>{selectedPoint.timestamp_raw}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">VEHICLE SPEED</span>
-              <span>{selectedPoint.speed_kmh !== null ? `${selectedPoint.speed_kmh} km/h` : 'N/A'}</span>
+              <span className="text-slate-500 text-[10px] block">SPEED & HEADING</span>
+              <span>
+                {selectedPoint.speed_kmh !== null ? `${selectedPoint.speed_kmh} km/h` : '0 km/h'}
+                {selectedPoint.heading_deg !== null && selectedPoint.heading_deg !== undefined ? ` • ${Math.round(selectedPoint.heading_deg)}°` : ''}
+              </span>
             </div>
             <div>
               <span className="text-slate-500 text-[10px] block">SERVING PCI</span>
-              <span className="text-cyan-400 font-bold">{selectedPoint.serving_cell_id ?? 'N/A'}</span>
+              <span className="text-cyan-400 font-bold">PCI {selectedPoint.serving_cell_id ?? 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">OPERATOR & TAC</span>
+              <span className="text-slate-200">
+                {selectedPoint.operator || 'Telecom'}
+                {selectedPoint.tac ? ` (TAC ${selectedPoint.tac})` : ''}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">EARFCN / ARFCN</span>
+              <span className="text-slate-300">{selectedPoint.earfcn ? `CH ${selectedPoint.earfcn}` : 'Standard'}</span>
             </div>
             <div>
               <span className="text-slate-500 text-[10px] block">NEIGHBOR PCI</span>
-              <span className="text-slate-400">{selectedPoint.neighbor_cell_id ?? 'N/A'}</span>
+              <span className="text-slate-400">{selectedPoint.neighbor_cell_id ? `PCI ${selectedPoint.neighbor_cell_id}` : 'None'}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">RSRP</span>
-              <span className="font-bold">
+              <span className="text-slate-500 text-[10px] block">RSRP (POWER)</span>
+              <span className="font-bold text-emerald-400">
                 {selectedPoint.rsrp_dbm !== null ? `${selectedPoint.rsrp_dbm} dBm` : 'N/A'}
               </span>
-              <span className="text-slate-500 text-[10px] block">IE: {selectedPoint.rsrp_ie ?? 'N/A'}</span>
+              <span className="text-slate-500 text-[10px] block">{selectedPoint.rsrp_class}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">RSRQ</span>
-              <span className="font-bold">
+              <span className="text-slate-500 text-[10px] block">RSRQ (QUALITY)</span>
+              <span className="font-bold text-sky-400">
                 {selectedPoint.rsrq_db !== null ? `${selectedPoint.rsrq_db} dB` : 'N/A'}
               </span>
-              <span className="text-slate-500 text-[10px] block">IE: {selectedPoint.rsrq_ie ?? 'N/A'}</span>
+              <span className="text-slate-500 text-[10px] block">{selectedPoint.rsrq_class}</span>
             </div>
             <div>
               <span className="text-slate-500 text-[10px] block">CINR / SINR</span>
-              <span className="font-bold">
+              <span className="font-bold text-amber-400">
                 {selectedPoint.cinr_db !== null ? `${selectedPoint.cinr_db} dB` : 'N/A'}
               </span>
             </div>
             <div>
               <span className="text-slate-500 text-[10px] block">HO TRIGGER</span>
               <span className={selectedPoint.handover_trigger ? 'text-red-400 font-bold' : 'text-slate-400'}>
-                {selectedPoint.handover_trigger ? 'YES (1)' : 'NO (0)'}
+                {selectedPoint.handover_trigger ? '⚡ YES (Active)' : 'NO (0)'}
               </span>
             </div>
           </div>
           <div className="mt-3 pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between">
             <span>Lat: {selectedPoint.latitude?.toFixed(5)}</span>
             <span>Lon: {selectedPoint.longitude?.toFixed(5)}</span>
+            {selectedPoint.accuracy_m && <span>Acc: ±{Math.round(selectedPoint.accuracy_m)}m</span>}
           </div>
         </div>
       )}

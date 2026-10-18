@@ -71,3 +71,43 @@ def test_upload_custom_csv():
     assert summary["handover_trigger_count"] == 1
     # 65 - 140 = -75 dBm
     assert summary["mean_rsrp_dbm"] == -76.5
+
+
+def test_get_extended_analysis():
+    client.post("/api/datasets/load-preset/bd_ds3_v1")
+    response = client.get("/api/datasets/current/extended-analysis")
+    assert response.status_code == 200
+    data = response.json()
+    assert "summary" in data
+    assert "per_cell_stats" in data
+    assert "data_quality" in data
+    assert data["data_quality"]["provenance_source"] is not None
+    assert data["summary"]["total_distance_km"] is not None
+    assert data["summary"]["total_distance_km"] > 0
+
+
+def test_export_csv_canonical():
+    client.post("/api/datasets/load-preset/bd_ds3_v1")
+    response = client.get("/api/datasets/current/export/csv?extended=false")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    lines = response.text.strip().split("\r\n")
+    if len(lines) == 1:
+        lines = response.text.strip().split("\n")
+    header = lines[0]
+    expected_headers = [
+        "Timestamp", "Latitude", "Longitude", "Speed (km/h)",
+        "Serving Cell ID", "Serving Cell RSRP", "Serving Cell RSRQ",
+        "Serving Cell CINR", "Handover Trigger", "TAC", "EARFCN",
+        "RSSI (dBm)", "Network Type", "Operator"
+    ]
+    assert header == ",".join(expected_headers)
+    assert len(lines) > 100
+
+
+def test_export_csv_extended():
+    client.post("/api/datasets/load-preset/bd_ds3_v1")
+    response = client.get("/api/datasets/current/export/csv?extended=true")
+    assert response.status_code == 200
+    assert "Heading (deg)" in response.text
+

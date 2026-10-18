@@ -47,5 +47,20 @@ data class LteMeasurementEntity(
     val eci: Int? = null,
     val neighborCellsJson: String? = null,
     val transitionType: String? = null,
-    val isGpsValid: Boolean = true
+    val isGpsValid: Boolean = true,
+    val nci: Long? = null,        // 36-bit NR Cell Identity (5G NR)
+    val nrArfcn: Int? = null,    // NR-ARFCN (5G NR)
+    val csiRsrp: Int? = null,    // CSI-RSRP (5G NR)
+    val csiSinr: Double? = null, // CSI-SINR (5G NR)
+    val dataNetworkType: String? = null,
+    val voiceNetworkType: String? = null,
+    val networkGen: String? = null,
+    val serviceState: String? = null,
+    val dataActivityState: String? = null,
+    val headingDeg: Float? = null,
+    val magneticHeadingDeg: Float? = null,
+    val headingAccuracyDeg: Float? = null,
+    val orientationSensorType: String? = null,
+    val headingValid: Boolean = false
 )
+

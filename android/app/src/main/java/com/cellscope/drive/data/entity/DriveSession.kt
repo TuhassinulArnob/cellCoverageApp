@@ -14,5 +14,10 @@ data class DriveSession(
     var notes: String? = null,
     var totalDistanceM: Double = 0.0,
     var maxSpeedKmh: Float = 0f,
-    var avgRsrpDbm: Double? = null
+    var avgRsrpDbm: Double? = null,
+    var avgLatencyMs: Double? = null,
+    var downloadThroughputMbps: Double? = null,
+    var uploadThroughputMbps: Double? = null,
+    var gpsAvailabilityPct: Float? = null,
+    var radioAvailabilityPct: Float? = null
 )

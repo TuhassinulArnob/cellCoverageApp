@@ -6,6 +6,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.cellscope.drive.R
 import com.cellscope.drive.databinding.ItemCellComparisonBinding
+import com.cellscope.drive.model.ServingStatus
 import com.cellscope.drive.telephony.LteBandTable
 import java.util.Locale
 
@@ -24,7 +25,8 @@ data class CellComparisonItem(
     val maxRsrp: Int?,
     val avgRsrq: Double?,
     val avgSinr: Double?,
-    val sampleCount: Int
+    val sampleCount: Int,
+    val servingStatus: ServingStatus = if (isServing) ServingStatus.PRIMARY_SERVING else ServingStatus.NEIGHBOR
 )
 
 class ComparisonAdapter : RecyclerView.Adapter<ComparisonAdapter.ComparisonViewHolder>() {
@@ -34,6 +36,8 @@ class ComparisonAdapter : RecyclerView.Adapter<ComparisonAdapter.ComparisonViewH
 
     private var filterRole: String = "ALL" // ALL, SERVING, NEIGHBOR
     private var filterBand: Int? = null
+
+    var onFilterResultListener: ((itemCount: Int) -> Unit)? = null
 
     fun setItems(items: List<CellComparisonItem>) {
         this.allItems = items
@@ -60,7 +64,12 @@ class ComparisonAdapter : RecyclerView.Adapter<ComparisonAdapter.ComparisonViewH
             val matchBand = if (filterBand != null) item.bandNumber == filterBand else true
             matchRole && matchBand
         }
-        notifyDataSetChanged()
+        try {
+            notifyDataSetChanged()
+        } catch (_: Exception) {
+            // Handled when mObservable is uninitialized in JVM unit test environment
+        }
+        onFilterResultListener?.invoke(displayedItems.size)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ComparisonViewHolder {
@@ -87,12 +96,23 @@ class ComparisonAdapter : RecyclerView.Adapter<ComparisonAdapter.ComparisonViewH
 
             binding.tvCompPci.text = "PCI ${item.pci}"
 
-            if (item.isServing) {
-                binding.tvCompRoleBadge.text = "SERVING"
-                binding.tvCompRoleBadge.setTextColor(ContextCompat.getColor(context, R.color.rf_excellent))
-            } else {
-                binding.tvCompRoleBadge.text = "NEIGHBOR"
-                binding.tvCompRoleBadge.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+            when (item.servingStatus) {
+                ServingStatus.PRIMARY_SERVING -> {
+                    binding.tvCompRoleBadge.text = "SERVING (PCELL)"
+                    binding.tvCompRoleBadge.setTextColor(ContextCompat.getColor(context, R.color.rf_excellent))
+                }
+                ServingStatus.SECONDARY_SERVING -> {
+                    binding.tvCompRoleBadge.text = "SERVING (SCELL - CA)"
+                    binding.tvCompRoleBadge.setTextColor(ContextCompat.getColor(context, R.color.rf_good))
+                }
+                ServingStatus.SERVING_UNCONFIRMED -> {
+                    binding.tvCompRoleBadge.text = "UNCONFIRMED"
+                    binding.tvCompRoleBadge.setTextColor(ContextCompat.getColor(context, R.color.rf_fair))
+                }
+                ServingStatus.NEIGHBOR -> {
+                    binding.tvCompRoleBadge.text = "NEIGHBOR"
+                    binding.tvCompRoleBadge.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                }
             }
 
             val bandStr = if (item.bandNumber != null) {

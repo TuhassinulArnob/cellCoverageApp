@@ -21,6 +21,9 @@ interface SessionDao {
     @Query("SELECT * FROM drive_sessions WHERE id = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: Long): DriveSession?
 
+    @Query("SELECT * FROM drive_sessions WHERE endTimeMs IS NULL ORDER BY id DESC LIMIT 1")
+    suspend fun getActiveSession(): DriveSession?
+
     @Query("DELETE FROM drive_sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: Long)
 }

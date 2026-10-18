@@ -58,3 +58,14 @@ export async function fetchMeasurements(options: {
   if (!res.ok) throw new Error('Failed to fetch measurement points');
   return res.json();
 }
+
+export async function fetchExtendedAnalysis(): Promise<import('../types/cellscope').ExtendedDatasetAnalysis> {
+  const res = await fetch(`${API_BASE}/datasets/current/extended-analysis`);
+  if (!res.ok) throw new Error('Failed to fetch extended telecom analysis');
+  return res.json();
+}
+
+export function getCsvExportUrl(extended: boolean = false): string {
+  return `${API_BASE}/datasets/current/export/csv?extended=${extended}`;
+}
+

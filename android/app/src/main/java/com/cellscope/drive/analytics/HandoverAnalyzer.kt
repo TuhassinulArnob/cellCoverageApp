@@ -3,6 +3,7 @@ package com.cellscope.drive.analytics
 import com.cellscope.drive.data.entity.CellTransitionEntity
 import com.cellscope.drive.data.entity.LteMeasurementEntity
 import java.util.Locale
+import kotlin.math.roundToInt
 
 data class CellDwellStat(
     val pci: Int,
@@ -22,11 +23,19 @@ data class HandoverSummary(
     val intraFrequencyTransitions: Int = 0,
     val interFrequencyTransitions: Int = 0,
     val transitionsPerKm: Float,
+    val transitionsPerMinute: Float = 0f,
+    val pingPongRatePct: Float = 0f,
+    val avgDeltaRsrpDb: Double? = null,
     val dwellStats: List<CellDwellStat>,
     val transitionEvents: List<CellTransitionEntity>
 )
 
 object HandoverAnalyzer {
+
+    const val API_LIMITATION_DISCLAIMER =
+        "Public Android Telephony APIs observe serving cell changes at application layer. In absence of RRC Connection Reconfiguration signalling, transitions are classified as Observed Transitions, Reselections, or Inferred Handovers based on empirical motion and RF evidence."
+
+    const val PING_PONG_WINDOW_MS = 15000L // 15 seconds threshold for rapid return transition
 
     fun analyzeTransitions(
         sessionId: Long,
@@ -41,11 +50,19 @@ object HandoverAnalyzer {
                 cellReselections = 0,
                 signalLossTransitions = 0,
                 pingPongEvents = 0,
+                intraFrequencyTransitions = 0,
+                interFrequencyTransitions = 0,
                 transitionsPerKm = 0f,
+                transitionsPerMinute = 0f,
+                pingPongRatePct = 0f,
+                avgDeltaRsrpDb = null,
                 dwellStats = emptyList(),
                 transitionEvents = emptyList()
             )
         }
+
+        // Sort chronologically to protect against jitter or out-of-order samples
+        val sortedMeasurements = measurements.sortedBy { it.timestampMs }
 
         val events = mutableListOf<CellTransitionEntity>()
         var lastPci: Int? = null
@@ -67,11 +84,13 @@ object HandoverAnalyzer {
         var pingPongCount = 0
         var intraFreqCount = 0
         var interFreqCount = 0
+        val deltaRsrpList = mutableListOf<Double>()
 
-        val recentPciHistory = ArrayDeque<Int>()
+        // Historical transition history: list of Pair(PCI, departureTimestampMs)
+        val transitionHistory = mutableListOf<Pair<Int, Long>>()
 
-        for (i in measurements.indices) {
-            val m = measurements[i]
+        for (i in sortedMeasurements.indices) {
+            val m = sortedMeasurements[i]
             val currentPci = m.servingPci
 
             if (currentPci != null) {
@@ -90,10 +109,13 @@ object HandoverAnalyzer {
                     rsrpCountMap[currentPci] = (rsrpCountMap[currentPci] ?: 0) + 1
                 }
 
-                // Detect transition
+                // Detect transition between physical cells
                 if (lastPci != null && lastPci != currentPci) {
                     val isStationary = (m.speedKmh ?: 0f) < 4.0f
                     val isSignalDrop = (lastRsrp ?: -90) < -115
+                    val deltaRsrp = if (lastRsrp != null && m.rsrpDbm != null) {
+                        (m.rsrpDbm - lastRsrp).toDouble().also { deltaRsrpList.add(it) }
+                    } else null
 
                     // Intra vs Inter frequency classification
                     val isIntraFreq = (lastEarfcn != null && m.earfcn != null && lastEarfcn == m.earfcn)
@@ -103,8 +125,10 @@ object HandoverAnalyzer {
                         interFreqCount++
                     }
 
-                    // Check ping pong: switched back to a recently left PCI within last 4 events
-                    val isPingPong = recentPciHistory.contains(currentPci)
+                    // Ping-pong detection: rapid return to a recently departed cell within PING_PONG_WINDOW_MS
+                    val recentDeparture = transitionHistory.findLast { it.first == currentPci }
+                    val isPingPong = recentDeparture != null && (m.timestampMs - recentDeparture.second) <= PING_PONG_WINDOW_MS
+
                     if (isPingPong) {
                         pingPongCount++
                     }
@@ -112,36 +136,38 @@ object HandoverAnalyzer {
                     val eventType: String
                     val confidence: Float
                     val detail: String
+                    val deltaStr = deltaRsrp?.let { " (ΔRSRP: ${if (it >= 0) "+$it" else "$it"} dB)" } ?: ""
 
                     when {
                         isSignalDrop -> {
                             eventType = "SIGNAL_LOSS"
                             confidence = 0.85f
-                            detail = "Signal collapsed to ${lastRsrp ?: -120} dBm before transition to PCI $currentPci"
+                            detail = "Signal collapsed to ${lastRsrp ?: -120} dBm before transition to PCI $currentPci$deltaStr"
                             signalLossCount++
                         }
                         isStationary -> {
                             eventType = "CELL_RESELECTION"
                             confidence = 0.80f
-                            detail = "Stationary cell reselection while speed was ${String.format(Locale.US, "%.1f", m.speedKmh ?: 0f)} km/h"
+                            detail = "Stationary cell reselection while speed was ${String.format(Locale.US, "%.1f", m.speedKmh ?: 0f)} km/h$deltaStr"
                             reselectionCount++
                         }
                         isPingPong -> {
                             eventType = "POSSIBLE_HANDOVER"
                             confidence = 0.65f
-                            detail = "Rapid ping-pong transition back to PCI $currentPci"
+                            val returnSeconds = (m.timestampMs - recentDeparture!!.second) / 1000L
+                            detail = "Rapid ping-pong transition back to PCI $currentPci within ${returnSeconds}s$deltaStr"
                         }
                         lastTac != null && m.tac != null && lastTac != m.tac -> {
                             eventType = "CONFIRMED_HANDOVER"
                             confidence = 0.95f
-                            detail = "Inter-TAC handover from TAC $lastTac to TAC ${m.tac} with PCI $lastPci -> $currentPci"
+                            detail = "Inter-TAC handover from TAC $lastTac to TAC ${m.tac} with PCI $lastPci -> $currentPci$deltaStr"
                             confirmedCount++
                         }
                         else -> {
                             eventType = "OBSERVED_TRANSITION"
                             confidence = 0.75f
                             val freqType = if (isIntraFreq) "Intra-Freq" else "Inter-Freq"
-                            detail = "$freqType switch from PCI $lastPci to PCI $currentPci"
+                            detail = "$freqType switch from PCI $lastPci to PCI $currentPci$deltaStr"
                             observedCount++
                         }
                     }
@@ -165,9 +191,9 @@ object HandoverAnalyzer {
                         )
                     )
 
-                    recentPciHistory.addLast(lastPci)
-                    if (recentPciHistory.size > 5) {
-                        recentPciHistory.removeFirst()
+                    transitionHistory.add(Pair(lastPci, m.timestampMs))
+                    if (transitionHistory.size > 20) {
+                        transitionHistory.removeAt(0)
                     }
                 }
 
@@ -195,6 +221,20 @@ object HandoverAnalyzer {
         val distanceKm = (totalDistanceMeters / 1000.0).coerceAtLeast(0.1)
         val transitionsPerKm = (events.size / distanceKm).toFloat()
 
+        val totalDurationMs = if (sortedMeasurements.size >= 2) {
+            sortedMeasurements.last().timestampMs - sortedMeasurements.first().timestampMs
+        } else 0L
+        val durationMinutes = (totalDurationMs / 60000.0).coerceAtLeast(0.1)
+        val transitionsPerMinute = (events.size / durationMinutes).toFloat()
+
+        val pingPongRatePct = if (events.isNotEmpty()) {
+            ((pingPongCount.toDouble() / events.size.toDouble()) * 100.0).toFloat()
+        } else 0f
+
+        val avgDeltaRsrp = if (deltaRsrpList.isNotEmpty()) {
+            ((deltaRsrpList.average() * 10.0).roundToInt() / 10.0)
+        } else null
+
         return HandoverSummary(
             totalTransitions = events.size,
             confirmedHandovers = confirmedCount,
@@ -205,6 +245,9 @@ object HandoverAnalyzer {
             intraFrequencyTransitions = intraFreqCount,
             interFrequencyTransitions = interFreqCount,
             transitionsPerKm = transitionsPerKm,
+            transitionsPerMinute = transitionsPerMinute,
+            pingPongRatePct = pingPongRatePct,
+            avgDeltaRsrpDb = avgDeltaRsrp,
             dwellStats = dwellStats,
             transitionEvents = events
         )

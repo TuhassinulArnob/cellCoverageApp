@@ -7,14 +7,13 @@ import com.cellscope.drive.data.entity.DriveSession
 import com.cellscope.drive.databinding.ItemSessionBinding
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
+import com.cellscope.drive.util.TelecomTimeUtils
 
 class SessionAdapter(
     private var sessions: List<DriveSession>,
-    private val onExportClick: (DriveSession) -> Unit
+    private val onExportClick: (DriveSession) -> Unit,
+    private val onItemClick: ((DriveSession) -> Unit)? = null
 ) : RecyclerView.Adapter<SessionAdapter.SessionViewHolder>() {
-
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm:ss", Locale.US)
 
     inner class SessionViewHolder(val binding: ItemSessionBinding) : RecyclerView.ViewHolder(binding.root)
 
@@ -26,8 +25,12 @@ class SessionAdapter(
     override fun onBindViewHolder(holder: SessionViewHolder, position: Int) {
         val session = sessions[position]
         holder.binding.tvSessionItemName.text = session.sessionName
-        holder.binding.tvSessionItemDate.text = dateFormat.format(Date(session.startTimeMs))
+        holder.binding.tvSessionItemDate.text = "${TelecomTimeUtils.formatBdtPretty(session.startTimeMs)} (BST)"
         holder.binding.tvSessionItemSamples.text = "${session.sampleCount} GPS/LTE samples"
+
+        holder.binding.root.setOnClickListener {
+            onItemClick?.invoke(session)
+        }
 
         holder.binding.btnExportSessionItem.setOnClickListener {
             onExportClick(session)

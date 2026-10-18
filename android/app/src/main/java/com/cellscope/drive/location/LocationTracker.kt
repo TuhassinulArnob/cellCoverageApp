@@ -18,18 +18,41 @@ class LocationTracker(
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
     private var isTracking = false
 
+    private val jitterFilter = GpsJitterFilter()
+    val orientationTracker = OrientationTracker(context)
+
     @Volatile
     var latestGpsData: GpsData = GpsData()
         private set
 
-    private var lastValidLocation: Location? = null
+    private var lastGpsFixTimeMs: Long = 0L
     private var lastFixTimeMs: Long = 0L
-    private var cumulativeDistanceMeters: Double = 0.0
+
+    var isPaused: Boolean = false
+        private set
+
+    val maxFilteredSpeedKmh: Float
+        get() = jitterFilter.maxSpeedKmh
+
+    val cumulativeDistanceMeters: Double
+        get() = jitterFilter.cumulativeDistanceMeters
+
+    val isStationary: Boolean
+        get() = jitterFilter.isStationary
 
     fun resetDistance() {
-        cumulativeDistanceMeters = 0.0
-        lastValidLocation = null
+        jitterFilter.reset()
+        lastGpsFixTimeMs = 0L
         lastFixTimeMs = 0L
+        isPaused = false
+    }
+
+    fun pauseTracking() {
+        isPaused = true
+    }
+
+    fun resumeTracking() {
+        isPaused = false
     }
 
     @SuppressLint("MissingPermission")
@@ -72,7 +95,8 @@ class LocationTracker(
             }
 
             isTracking = true
-            Log.d("LocationTracker", "Enhanced location tracking started.")
+            orientationTracker.startListening()
+            Log.d("LocationTracker", "Enhanced location tracking and orientation listening started with GpsJitterFilter.")
         } catch (e: SecurityException) {
             Log.e("LocationTracker", "Location permission missing: ${e.message}")
         } catch (e: Exception) {
@@ -84,8 +108,9 @@ class LocationTracker(
         if (!isTracking || locationManager == null) return
         try {
             locationManager.removeUpdates(this)
+            orientationTracker.stopListening()
             isTracking = false
-            Log.d("LocationTracker", "Location tracking stopped.")
+            Log.d("LocationTracker", "Location tracking and orientation listening stopped.")
         } catch (e: Exception) {
             Log.e("LocationTracker", "Error stopping location tracking: ${e.message}")
         }
@@ -97,27 +122,23 @@ class LocationTracker(
 
     private fun updateLocation(loc: Location) {
         val now = System.currentTimeMillis()
-        val timeSinceLast = if (lastFixTimeMs > 0) now - lastFixTimeMs else 0L
+        val provider = loc.provider ?: "unknown"
+        val isGpsProvider = provider.equals(LocationManager.GPS_PROVIDER, ignoreCase = true)
 
-        // Validation against GPS glitches and out-of-bounds coords
-        val isValidFix = validateGpsFix(loc)
-
-        if (isValidFix) {
-            lastValidLocation?.let { prev ->
-                val distance = loc.distanceTo(prev)
-                val dtSec = (loc.time - prev.time).coerceAtLeast(1) / 1000.0
-                val calculatedSpeedKmh = (distance / dtSec) * 3.6
-
-                // Reject impossible speed jumps (> 250 km/h) typical of antenna glitch/outliers
-                if (calculatedSpeedKmh <= 250.0 && distance in 1.0..1000.0) {
-                    cumulativeDistanceMeters += distance
-                }
+        if (isGpsProvider) {
+            lastGpsFixTimeMs = now
+        } else if (provider.equals(LocationManager.NETWORK_PROVIDER, ignoreCase = true)) {
+            // If GPS provider is actively delivering fixes within the last 15 seconds,
+            // ignore Network provider fixes to prevent jumping between GPS and cell-tower/WiFi coordinates
+            if (lastGpsFixTimeMs > 0 && (now - lastGpsFixTimeMs) < 15000L) {
+                return
             }
-            lastValidLocation = loc
-            lastFixTimeMs = now
         }
 
-        val speedKmh = if (loc.hasSpeed() && loc.speed >= 0f) {
+        val timeSinceLast = if (lastFixTimeMs > 0) now - lastFixTimeMs else 0L
+        lastFixTimeMs = now
+
+        val rawSpeedKmh = if (loc.hasSpeed() && loc.speed >= 0f) {
             loc.speed * 3.6f
         } else {
             null
@@ -126,21 +147,47 @@ class LocationTracker(
         val alt = if (loc.hasAltitude()) loc.altitude else null
         val acc = if (loc.hasAccuracy()) loc.accuracy else null
         val bearing = if (loc.hasBearing()) loc.bearing else null
+        val fixTimestamp = loc.time.takeIf { it > 0 } ?: now
+
+        // Process through GpsJitterFilter
+        val filterResult = jitterFilter.processFix(
+            lat = loc.latitude,
+            lon = loc.longitude,
+            altitudeM = alt,
+            accuracyM = acc,
+            rawSpeedKmh = rawSpeedKmh,
+            timestampMs = fixTimestamp,
+            isPaused = isPaused
+        )
+
+        // Update coordinates in orientationTracker for declination calculation
+        orientationTracker.updateCoordinates(loc.latitude, loc.longitude, alt)
+        val orient = orientationTracker.latestOrientation
 
         val data = GpsData(
             latitude = loc.latitude,
             longitude = loc.longitude,
             altitudeM = alt,
             accuracyM = acc,
-            speedKmh = speedKmh,
+            speedKmh = filterResult.filteredSpeedKmh,
+            rawSpeedKmh = rawSpeedKmh,
+            isStationary = filterResult.isStationary,
             bearing = bearing,
-            timestampMs = loc.time.takeIf { it > 0 } ?: now,
-            provider = loc.provider ?: "gps",
+            timestampMs = fixTimestamp,
+            provider = provider,
             hasFix = true,
-            isValid = isValidFix,
-            cumulativeDistanceM = cumulativeDistanceMeters,
-            timeSinceLastFixMs = timeSinceLast
+            isValid = filterResult.isValidFix,
+            cumulativeDistanceM = filterResult.cumulativeDistanceM,
+            rawCumulativeDistanceM = filterResult.rawCumulativeDistanceM,
+            timeSinceLastFixMs = timeSinceLast,
+            filterReason = filterResult.filterReason,
+            deviceHeadingDeg = orient.trueHeadingDeg,
+            magneticHeadingDeg = orient.magneticHeadingDeg,
+            headingAccuracyDeg = orient.headingAccuracyDeg,
+            orientationSensorType = orient.sensorType,
+            isHeadingCalibrated = orient.isCalibrated
         )
+
         latestGpsData = data
         onLocationUpdated(data)
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, Map, BarChart3, Table, UploadCloud, Signal } from 'lucide-react';
+import { Radio, Map, BarChart3, Table, UploadCloud, Signal, AlertTriangle, ShieldCheck, FileDown } from 'lucide-react';
 import type { DatasetSummary } from '../types/cellscope';
 
 interface NavbarProps {
@@ -17,9 +17,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   const tabs = [
     { id: 'map', label: 'Coverage Map', icon: Map },
     { id: 'analytics', label: 'RF Analytics', icon: BarChart3 },
-    { id: 'table', label: 'Measurement Data', icon: Table },
+    { id: 'events', label: 'Events & Anomalies', icon: AlertTriangle },
+    { id: 'quality', label: 'Data Quality', icon: ShieldCheck },
+    { id: 'table', label: 'Data Table', icon: Table },
+    { id: 'report', label: 'Reports & Export', icon: FileDown },
     { id: 'import', label: 'Import / Presets', icon: UploadCloud },
   ];
+
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-50">

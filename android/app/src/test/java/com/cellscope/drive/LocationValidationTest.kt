@@ -37,4 +37,14 @@ class LocationValidationTest {
         val degraded = LocationTracker.validateCoordinates(23.81, 90.41, 150.0f)
         assertFalse(degraded)
     }
+
+    @Test
+    fun testValidBoundaryCoordinates() {
+        assertTrue(LocationTracker.validateCoordinates(90.0, 180.0, 10.0f))
+        assertTrue(LocationTracker.validateCoordinates(-90.0, -180.0, 10.0f))
+        assertFalse(LocationTracker.validateCoordinates(90.001, 0.0))
+        assertFalse(LocationTracker.validateCoordinates(-90.001, 0.0))
+        assertFalse(LocationTracker.validateCoordinates(0.0, 180.001))
+        assertFalse(LocationTracker.validateCoordinates(0.0, -180.001))
+    }
 }

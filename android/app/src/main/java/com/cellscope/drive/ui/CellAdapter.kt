@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.cellscope.drive.R
 import com.cellscope.drive.databinding.ItemCellBinding
 import com.cellscope.drive.model.ObservedCell
+import com.cellscope.drive.model.ServingStatus
 import com.cellscope.drive.telephony.LteBandTable
 import java.util.Locale
 
@@ -34,10 +35,31 @@ class CellAdapter(
         fun bind(cell: ObservedCell) {
             val ctx = binding.root.context
 
-            // Role Badge
-            binding.tvCellRole.text = if (cell.isServing) "SERVING" else "NEIGHBOR"
-            val roleBgColor = if (cell.isServing) R.color.rf_excellent else R.color.surface_variant
-            val roleTextColor = if (cell.isServing) R.color.background else R.color.text_secondary
+            // Authoritative Serving Role Badge
+            val (roleText, roleBgColor, roleTextColor) = when (cell.servingStatus) {
+                ServingStatus.PRIMARY_SERVING -> Triple(
+                    "SERVING (PCELL)",
+                    R.color.rf_excellent,
+                    R.color.background
+                )
+                ServingStatus.SECONDARY_SERVING -> Triple(
+                    "SERVING (SCELL - CA)",
+                    R.color.rf_good,
+                    R.color.background
+                )
+                ServingStatus.SERVING_UNCONFIRMED -> Triple(
+                    "UNCONFIRMED",
+                    R.color.rf_fair,
+                    R.color.background
+                )
+                ServingStatus.NEIGHBOR -> Triple(
+                    "NEIGHBOR",
+                    R.color.surface_variant,
+                    R.color.text_secondary
+                )
+            }
+
+            binding.tvCellRole.text = roleText
             binding.tvCellRole.backgroundTintList = ContextCompat.getColorStateList(ctx, roleBgColor)
             binding.tvCellRole.setTextColor(ContextCompat.getColor(ctx, roleTextColor))
 
@@ -75,13 +97,24 @@ class CellAdapter(
             binding.tvCellSinr.text = cell.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB" } ?: "SINR: Unavailable"
             binding.tvCellEarfcn.text = cell.earfcn?.let { "EARFCN: $it" } ?: "EARFCN: —"
 
-            // Identifiers: Only serving cells broadcast SIB1 TAC & ECI
-            if (cell.isServing) {
-                binding.tvCellTac.text = cell.tac?.let { "TAC: $it" } ?: "TAC: —"
-                binding.tvCellEci.text = cell.eci?.let { "ECI: $it" } ?: "ECI: —"
-            } else {
-                binding.tvCellTac.text = "TAC: N/A (Neighbor)"
-                binding.tvCellEci.text = "ECI: N/A (Neighbor)"
+            // Identifiers: PCell broadcasts SIB1 TAC & ECI
+            when (cell.servingStatus) {
+                ServingStatus.PRIMARY_SERVING -> {
+                    binding.tvCellTac.text = cell.tac?.let { "TAC: $it" } ?: "TAC: —"
+                    binding.tvCellEci.text = cell.eci?.let { "ECI: $it" } ?: "ECI: —"
+                }
+                ServingStatus.SECONDARY_SERVING -> {
+                    binding.tvCellTac.text = cell.tac?.let { "TAC: $it" } ?: "TAC: SCell (CA)"
+                    binding.tvCellEci.text = cell.eci?.let { "ECI: $it" } ?: "ECI: SCell (CA)"
+                }
+                ServingStatus.SERVING_UNCONFIRMED -> {
+                    binding.tvCellTac.text = cell.tac?.let { "TAC: $it" } ?: "TAC: Unconfirmed"
+                    binding.tvCellEci.text = cell.eci?.let { "ECI: $it" } ?: "ECI: Unconfirmed"
+                }
+                ServingStatus.NEIGHBOR -> {
+                    binding.tvCellTac.text = "TAC: N/A (Neighbor)"
+                    binding.tvCellEci.text = "ECI: N/A (Neighbor)"
+                }
             }
 
             // RSSI or Timing Advance

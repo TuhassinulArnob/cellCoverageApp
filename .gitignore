@@ -61,6 +61,7 @@ Thumbs.db
 local.properties
 .idea/caches/
 *.apk
+!/CellScope-v2.0-final.apk
 *.aar
 *.aab
 *.dex
