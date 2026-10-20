@@ -8,12 +8,14 @@ import { EventsAndAnomalies } from './components/EventsAndAnomalies';
 import { DataQualityPanel } from './components/DataQualityPanel';
 import { ReportExporter } from './components/ReportExporter';
 import { FilterDrawer } from './components/FilterDrawer';
+import { NetworkPerformancePanel } from './components/NetworkPerformancePanel';
 import type {
   AvailableDatasetInfo,
   DatasetSummary,
   MeasurementPoint,
   ExtendedDatasetAnalysis,
   FilterState,
+  QoeTestRecord,
 } from './types/cellscope';
 import {
   fetchAvailableDatasets,
@@ -29,6 +31,8 @@ export const App: React.FC = () => {
   const [summary, setSummary] = useState<DatasetSummary | null>(null);
   const [measurements, setMeasurements] = useState<MeasurementPoint[]>([]);
   const [extendedAnalysis, setExtendedAnalysis] = useState<ExtendedDatasetAnalysis | null>(null);
+  const [qoeTests, setQoeTests] = useState<QoeTestRecord[]>([]);
+  const [focusedCoordinate, setFocusedCoordinate] = useState<{ lat: number; lon: number } | null>(null);
   const [availablePresets, setAvailablePresets] = useState<AvailableDatasetInfo[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,12 +69,16 @@ export const App: React.FC = () => {
         const defaultPresetId = 'bd_ds3_v1';
         const res = await loadPresetDataset(defaultPresetId);
         setSummary(res.summary);
+        setQoeTests(res.qoe_tests || []);
 
         const allPoints = await fetchMeasurements({ gpsOnly: false });
         setMeasurements(allPoints);
 
         const ext = await fetchExtendedAnalysis();
         setExtendedAnalysis(ext);
+        if ((!res.qoe_tests || res.qoe_tests.length === 0) && ext.qoe_tests && ext.qoe_tests.length > 0) {
+          setQoeTests(ext.qoe_tests);
+        }
       } catch (err: any) {
         console.error('Initialization error:', err);
         setError(err.message || 'Failed to initialize CellScope');
@@ -88,6 +96,7 @@ export const App: React.FC = () => {
       setError(null);
       const res = await loadPresetDataset(presetId);
       setSummary(res.summary);
+      setQoeTests(res.qoe_tests || []);
       setFilters({
         servingCellId: null,
         networkGen: null,
@@ -105,6 +114,9 @@ export const App: React.FC = () => {
 
       const ext = await fetchExtendedAnalysis();
       setExtendedAnalysis(ext);
+      if ((!res.qoe_tests || res.qoe_tests.length === 0) && ext.qoe_tests && ext.qoe_tests.length > 0) {
+        setQoeTests(ext.qoe_tests);
+      }
 
       // If dataset has GPS, switch to map; otherwise switch to analytics
       if (res.summary.has_gps) {
@@ -125,6 +137,7 @@ export const App: React.FC = () => {
       setError(null);
       const res = await uploadCsvFile(file);
       setSummary(res.summary);
+      setQoeTests(res.qoe_tests || []);
       setFilters({
         servingCellId: null,
         networkGen: null,
@@ -142,6 +155,9 @@ export const App: React.FC = () => {
 
       const ext = await fetchExtendedAnalysis();
       setExtendedAnalysis(ext);
+      if ((!res.qoe_tests || res.qoe_tests.length === 0) && ext.qoe_tests && ext.qoe_tests.length > 0) {
+        setQoeTests(ext.qoe_tests);
+      }
 
       if (res.summary.has_gps) {
         setCurrentTab('map');
@@ -272,6 +288,8 @@ export const App: React.FC = () => {
                 measurements={filteredMeasurements}
                 summary={effectiveSummary}
                 extendedAnalysis={extendedAnalysis}
+                qoeTests={qoeTests}
+                focusedCoordinate={focusedCoordinate}
                 selectedCellId={filters.servingCellId}
                 setSelectedCellId={handleSelectedCellChange}
                 onOpenFilters={() => setIsFilterDrawerOpen(true)}
@@ -284,6 +302,17 @@ export const App: React.FC = () => {
                 summary={effectiveSummary}
                 measurements={filteredMeasurements}
                 extendedAnalysis={extendedAnalysis}
+              />
+            )}
+
+            {currentTab === 'performance' && (
+              <NetworkPerformancePanel
+                summary={effectiveSummary?.qoe_summary}
+                qoeTests={qoeTests}
+                onSelectCoordinate={(lat, lon) => {
+                  setFocusedCoordinate({ lat, lon });
+                  setCurrentTab('map');
+                }}
               />
             )}
 

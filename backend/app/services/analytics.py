@@ -18,6 +18,8 @@ from backend.app.core.schema import (
     ServiceHoleEvent,
     DataQualityReport,
     ExtendedDatasetAnalysis,
+    QoeTestRecord,
+    QoePerformanceSummary,
 )
 from backend.app.core.rf_math import (
     rsrp_ie_to_dbm,
@@ -26,7 +28,7 @@ from backend.app.core.rf_math import (
     classify_rsrq,
     classify_cinr,
 )
-from backend.app.services.parser import clean_numeric_value
+from backend.app.services.parser import clean_numeric_value, extract_qoe_records
 from backend.app.services.validator import validate_coordinates, validate_rf_ranges
 
 
@@ -65,11 +67,12 @@ def process_and_summarize_dataset(
     df: pd.DataFrame,
     mapping: Dict[str, str],
     filename: str,
-    dataset_id: Optional[str] = None
-) -> Tuple[DatasetSummary, List[MeasurementPoint]]:
+    dataset_id: Optional[str] = None,
+    raw_text: Optional[str] = None
+) -> Tuple[DatasetSummary, List[MeasurementPoint], List[QoeTestRecord]]:
     """
-    Transforms raw DataFrame using column mapping into canonical MeasurementPoints
-    and calculates statistical and RF KPI summaries.
+    Transforms raw DataFrame using column mapping into canonical MeasurementPoints,
+    extracts active network QoE test records, and calculates statistical summaries.
     """
     if dataset_id is None:
         dataset_id = str(uuid.uuid4())
@@ -433,10 +436,62 @@ def process_and_summarize_dataset(
         measurement_provenance=measurement_provenance,
     )
 
-    return summary, points
+    # 4. Extract and summarize Active QoE tests
+    raw_qoe = extract_qoe_records(raw_text or "", df=df, mapping=mapping)
+
+    # Enrich operator / context if missing in QoE row
+    dataset_operator = next((p.operator for p in points if p.operator), None)
+    for q in raw_qoe:
+        if not q.get("operator") and dataset_operator:
+            q["operator"] = dataset_operator
+
+    qoe_records = [QoeTestRecord(**q) for q in raw_qoe]
+
+    qoe_summary: Optional[QoePerformanceSummary] = None
+    if qoe_records:
+        completed = [r for r in qoe_records if r.test_status.upper() == "COMPLETED"]
+        dl_vals = [r.download_mbps for r in completed if r.download_mbps is not None]
+        ul_vals = [r.upload_mbps for r in completed if r.upload_mbps is not None]
+        ping_vals = [r.ping_latency_ms for r in completed if r.ping_latency_ms is not None]
+        jitter_vals = [r.jitter_ms for r in completed if r.jitter_ms is not None]
+        loss_vals = [r.packet_loss_pct for r in completed if r.packet_loss_pct is not None]
+
+        dl_bytes_total = sum(r.download_bytes or 0 for r in completed)
+        ul_bytes_total = sum(r.upload_bytes or 0 for r in completed)
+
+        qoe_summary = QoePerformanceSummary(
+            total_tests=len(qoe_records),
+            completed_tests=len(completed),
+            failed_tests=sum(1 for r in qoe_records if r.test_status.upper() == "FAILED"),
+            skipped_tests=sum(1 for r in qoe_records if r.test_status.upper() == "SKIPPED"),
+            has_speed_data=bool(dl_vals or ul_vals),
+            has_ping_data=bool(ping_vals),
+            avg_ping_ms=round(float(np.mean(ping_vals)), 2) if ping_vals else None,
+            min_ping_ms=round(float(min(ping_vals)), 2) if ping_vals else None,
+            max_ping_ms=round(float(max(ping_vals)), 2) if ping_vals else None,
+            median_ping_ms=round(float(np.median(ping_vals)), 2) if ping_vals else None,
+            avg_jitter_ms=round(float(np.mean(jitter_vals)), 2) if jitter_vals else None,
+            avg_packet_loss_pct=round(float(np.mean(loss_vals)), 2) if loss_vals else None,
+            avg_download_mbps=round(float(np.mean(dl_vals)), 2) if dl_vals else None,
+            min_download_mbps=round(float(min(dl_vals)), 2) if dl_vals else None,
+            max_download_mbps=round(float(max(dl_vals)), 2) if dl_vals else None,
+            avg_upload_mbps=round(float(np.mean(ul_vals)), 2) if ul_vals else None,
+            min_upload_mbps=round(float(min(ul_vals)), 2) if ul_vals else None,
+            max_upload_mbps=round(float(max(ul_vals)), 2) if ul_vals else None,
+            total_download_bytes=dl_bytes_total,
+            total_upload_bytes=ul_bytes_total,
+        )
+
+    summary.qoe_summary = qoe_summary
+
+    return summary, points, qoe_records
 
 
-def compute_extended_analysis(summary: DatasetSummary, points: List[MeasurementPoint]) -> ExtendedDatasetAnalysis:
+def compute_extended_analysis(
+    summary: DatasetSummary,
+    points: List[MeasurementPoint],
+    qoe_tests: Optional[List[QoeTestRecord]] = None
+) -> ExtendedDatasetAnalysis:
     """Computes transitions, explainable anomalies, service holes, and weak coverage segments."""
     transitions: List[CellTransitionEvent] = []
     service_holes: List[ServiceHoleEvent] = []
@@ -631,5 +686,6 @@ def compute_extended_analysis(summary: DatasetSummary, points: List[MeasurementP
         weak_segments=weak_segments,
         per_cell_stats=summary.per_cell_stats,
         data_quality=data_quality,
+        qoe_tests=qoe_tests or [],
     )
 

@@ -12,8 +12,9 @@ from backend.app.core.schema import (
     IngestResponse,
     AvailableDatasetInfo,
     ExtendedDatasetAnalysis,
+    QoeTestRecord,
 )
-from backend.app.services.parser import parse_csv_to_dataframe
+from backend.app.services.parser import parse_csv_to_dataframe, parse_csv_with_raw_text
 from backend.app.services.analytics import process_and_summarize_dataset
 
 router = APIRouter(prefix="/api", tags=["Drive-Test Analytics"])
@@ -34,6 +35,15 @@ def resolve_preset_path(rel_path: str) -> Optional[Path]:
 
 
 PRESET_CATALOG = [
+    {
+        "id": "bd_survey_qoe_latest",
+        "title": "Live Field Survey with Active Network QoE & Speed Tests (20261020)",
+        "category": "Field Dataset",
+        "rel_path": "docs/cellscope_extended_Survey_20261020_081637_20261020_081637.csv",
+        "rows": 98,
+        "has_gps": True,
+        "description": "Genuine multi-section drive test on Robi Axiata featuring bounded active download & upload throughput, RTT latency, RFC 3550 jitter, and probe loss tests."
+    },
     {
         "id": "bd_ds3_v1",
         "title": "Dhaka Urban LTE Route 3 (ver 1) - Complete GPS",
@@ -123,17 +133,19 @@ def load_preset_dataset(preset_id: str):
         raise HTTPException(status_code=404, detail=f"File not found at {preset['rel_path']}")
 
     try:
-        df, mapping, unmapped = parse_csv_to_dataframe(file_path=str(file_path))
-        summary, points = process_and_summarize_dataset(
+        df, mapping, unmapped, raw_text = parse_csv_with_raw_text(file_path=str(file_path))
+        summary, points, qoe_tests = process_and_summarize_dataset(
             df=df,
             mapping=mapping,
             filename=preset["title"],
-            dataset_id=preset_id
+            dataset_id=preset_id,
+            raw_text=raw_text
         )
 
         _DATASET_STORE[preset_id] = {
             "summary": summary,
             "points": points,
+            "qoe_tests": qoe_tests,
             "raw_filename": preset["title"]
         }
         global _CURRENT_DATASET_ID
@@ -142,7 +154,8 @@ def load_preset_dataset(preset_id: str):
         return IngestResponse(
             dataset_id=preset_id,
             summary=summary,
-            sample_measurements=points[:100]
+            sample_measurements=points[:100],
+            qoe_tests=qoe_tests
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading preset: {str(e)}")
@@ -156,18 +169,20 @@ async def upload_csv_file(file: UploadFile = File(...)):
 
     try:
         content = await file.read()
-        df, mapping, unmapped = parse_csv_to_dataframe(content_bytes=content)
+        df, mapping, unmapped, raw_text = parse_csv_with_raw_text(content_bytes=content)
         dataset_id = f"upload_{file.filename}_{len(df)}"
-        summary, points = process_and_summarize_dataset(
+        summary, points, qoe_tests = process_and_summarize_dataset(
             df=df,
             mapping=mapping,
             filename=file.filename,
-            dataset_id=dataset_id
+            dataset_id=dataset_id,
+            raw_text=raw_text
         )
 
         _DATASET_STORE[dataset_id] = {
             "summary": summary,
             "points": points,
+            "qoe_tests": qoe_tests,
             "raw_filename": file.filename
         }
         global _CURRENT_DATASET_ID
@@ -176,7 +191,8 @@ async def upload_csv_file(file: UploadFile = File(...)):
         return IngestResponse(
             dataset_id=dataset_id,
             summary=summary,
-            sample_measurements=points[:100]
+            sample_measurements=points[:100],
+            qoe_tests=qoe_tests
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process CSV: {str(e)}")
@@ -230,9 +246,40 @@ def get_extended_analysis():
     dataset_entry = _DATASET_STORE[_CURRENT_DATASET_ID]
     summary = dataset_entry["summary"]
     points = dataset_entry["points"]
+    qoe_tests = dataset_entry.get("qoe_tests", [])
 
     from backend.app.services.analytics import compute_extended_analysis
-    return compute_extended_analysis(summary=summary, points=points)
+    return compute_extended_analysis(summary=summary, points=points, qoe_tests=qoe_tests)
+
+
+@router.get("/datasets/current/qoe-tests", response_model=List[QoeTestRecord])
+def get_current_qoe_tests(
+    rat: Optional[str] = Query(None, description="Filter by RAT generation (e.g. 4G, 5G, 2G)"),
+    operator: Optional[str] = Query(None, description="Filter by operator name"),
+    pci: Optional[int] = Query(None, description="Filter by serving PCI"),
+    status: Optional[str] = Query(None, description="Filter by test status (COMPLETED, FAILED, SKIPPED)"),
+):
+    """Gets individual network QoE ping, download, upload, jitter, and loss test records."""
+    if not _CURRENT_DATASET_ID or _CURRENT_DATASET_ID not in _DATASET_STORE:
+        load_preset_dataset("bd_ds3_v1")
+
+    dataset_entry = _DATASET_STORE[_CURRENT_DATASET_ID]
+    qoe_tests: List[QoeTestRecord] = dataset_entry.get("qoe_tests", [])
+
+    filtered = qoe_tests
+    if rat:
+        r_clean = rat.strip().lower()
+        filtered = [t for t in filtered if t.serving_rat and r_clean in t.serving_rat.lower()]
+    if operator:
+        op_clean = operator.strip().lower()
+        filtered = [t for t in filtered if t.operator and op_clean in t.operator.lower()]
+    if pci is not None:
+        filtered = [t for t in filtered if t.serving_pci == pci]
+    if status:
+        st_clean = status.strip().upper()
+        filtered = [t for t in filtered if t.test_status.upper() == st_clean]
+
+    return filtered
 
 
 @router.get("/datasets/current/export/csv")

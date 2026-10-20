@@ -3,6 +3,8 @@ import type {
   DatasetSummary,
   IngestResponse,
   MeasurementPoint,
+  ExtendedDatasetAnalysis,
+  QoeTestRecord,
 } from '../types/cellscope';
 
 const API_BASE = '/api';
@@ -59,13 +61,29 @@ export async function fetchMeasurements(options: {
   return res.json();
 }
 
-export async function fetchExtendedAnalysis(): Promise<import('../types/cellscope').ExtendedDatasetAnalysis> {
+export async function fetchExtendedAnalysis(): Promise<ExtendedDatasetAnalysis> {
   const res = await fetch(`${API_BASE}/datasets/current/extended-analysis`);
   if (!res.ok) throw new Error('Failed to fetch extended telecom analysis');
+  return res.json();
+}
+
+export async function fetchQoeTests(options: {
+  rat?: string;
+  operator?: string;
+  pci?: number;
+  status?: string;
+} = {}): Promise<QoeTestRecord[]> {
+  const params = new URLSearchParams();
+  if (options.rat) params.append('rat', options.rat);
+  if (options.operator) params.append('operator', options.operator);
+  if (options.pci !== undefined) params.append('pci', options.pci.toString());
+  if (options.status) params.append('status', options.status);
+
+  const res = await fetch(`${API_BASE}/datasets/current/qoe-tests?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch network QoE tests');
   return res.json();
 }
 
 export function getCsvExportUrl(extended: boolean = false): string {
   return `${API_BASE}/datasets/current/export/csv?extended=${extended}`;
 }
-

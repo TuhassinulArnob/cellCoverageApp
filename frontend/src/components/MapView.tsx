@@ -7,6 +7,7 @@ import type {
   ExtendedDatasetAnalysis,
   MapOverlayState,
   EstimatedCellSite,
+  QoeTestRecord,
 } from '../types/cellscope';
 import { estimateCellSites, resolveEarfcn, timingAdvanceToMeters } from '../utils/telecom';
 import { useTheme } from '../context/useTheme';
@@ -21,26 +22,31 @@ import {
   Zap,
   TrendingDown,
   Route,
+  Activity,
 } from 'lucide-react';
 
 interface MapViewProps {
   measurements: MeasurementPoint[];
   summary: DatasetSummary | null;
   extendedAnalysis: ExtendedDatasetAnalysis | null;
+  qoeTests?: QoeTestRecord[];
   selectedCellId: number | null;
   setSelectedCellId: (id: number | null) => void;
   onOpenFilters?: () => void;
   activeFilterCount?: number;
+  focusedCoordinate?: { lat: number; lon: number } | null;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
   measurements,
   summary,
   extendedAnalysis,
+  qoeTests = [],
   selectedCellId,
   setSelectedCellId,
   onOpenFilters,
   activeFilterCount = 0,
+  focusedCoordinate,
 }) => {
   const { theme } = useTheme();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -52,6 +58,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const handoversLayerRef = useRef<L.LayerGroup | null>(null);
   const cellSitesLayerRef = useRef<L.LayerGroup | null>(null);
   const pointsLayerRef = useRef<L.LayerGroup | null>(null);
+  const qoeTestsLayerRef = useRef<L.LayerGroup | null>(null);
 
   const [activeMetric, setActiveMetric] = useState<ActiveMetric>('rsrp');
   const [selectedPoint, setSelectedPoint] = useState<MeasurementPoint | null>(null);
@@ -75,6 +82,7 @@ export const MapView: React.FC<MapViewProps> = ({
     handovers: true,
     cellSites: true,
     taUncertainty: false,
+    qoeTests: true,
   });
 
   const validGpsPoints = useMemo(
@@ -170,12 +178,13 @@ export const MapView: React.FC<MapViewProps> = ({
 
       tileLayer.addTo(map);
 
-      // Initialize layer groups in z-order: track -> weak zones -> points -> handovers -> cell sites
+      // Initialize layer groups in z-order: track -> weak zones -> points -> handovers -> cell sites -> QoE tests
       routeTrackLayerRef.current = L.layerGroup().addTo(map);
       weakZonesLayerRef.current = L.layerGroup().addTo(map);
       pointsLayerRef.current = L.layerGroup().addTo(map);
       handoversLayerRef.current = L.layerGroup().addTo(map);
       cellSitesLayerRef.current = L.layerGroup().addTo(map);
+      qoeTestsLayerRef.current = L.layerGroup().addTo(map);
 
       mapInstanceRef.current = map;
     }
@@ -490,6 +499,80 @@ export const MapView: React.FC<MapViewProps> = ({
     });
   }, [validGpsPoints, activeMetric, selectedCellId, overlays.taUncertainty]);
 
+  // Update QoE Test Markers Layer
+  useEffect(() => {
+    const qoeLayer = qoeTestsLayerRef.current;
+    if (!qoeLayer) return;
+    qoeLayer.clearLayers();
+
+    if (!overlays.qoeTests || !qoeTests || qoeTests.length === 0) return;
+
+    qoeTests.forEach((test) => {
+      if (test.latitude === null || test.longitude === null) return;
+
+      const lat = test.latitude;
+      const lon = test.longitude;
+      const isSuccess = test.test_status === 'SUCCESS' || (!test.test_status && (test.download_mbps !== null || test.ping_latency_ms !== null));
+      const isFailed = test.test_status === 'FAILED' || test.test_status === 'ERROR';
+
+      const badgeColor = isSuccess ? '#10b981' : isFailed ? '#ef4444' : '#06b6d4';
+      const qoeIcon = L.divIcon({
+        className: 'cellscope-qoe-marker',
+        html: `
+          <div style="
+            width: 26px;
+            height: 26px;
+            background: ${badgeColor};
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 8px ${badgeColor}bb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+          ">
+            <span style="color: white; font-size: 11px; font-weight: bold; line-height: 1;">⚡</span>
+          </div>
+        `,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      const marker = L.marker([lat, lon], { icon: qoeIcon });
+
+      const dlStr = test.download_mbps !== null ? `${test.download_mbps.toFixed(2)} Mbps` : 'N/A';
+      const ulStr = test.upload_mbps !== null ? `${test.upload_mbps.toFixed(2)} Mbps` : 'N/A';
+      const pingStr = test.ping_latency_ms !== null ? `${Math.round(test.ping_latency_ms)} ms` : 'N/A';
+      const jitterStr = test.jitter_ms !== null ? `${test.jitter_ms.toFixed(1)} ms` : '—';
+      const lossStr = test.packet_loss_pct !== null ? `${test.packet_loss_pct.toFixed(1)}%` : '—';
+
+      marker.bindTooltip(
+        `<div class="text-xs font-mono p-1">
+          <div class="font-bold flex items-center gap-1" style="color: ${badgeColor}">
+            ⚡ Active QoE Test #${test.id} (${test.test_type || 'SPEED_TEST'})
+          </div>
+          <div class="mt-1">Status: <strong class="${isSuccess ? 'text-emerald-500' : 'text-red-500'}">${test.test_status || 'RECORDED'}</strong></div>
+          <div class="text-cyan-600 dark:text-cyan-400">Download: <strong>${dlStr}</strong></div>
+          <div class="text-indigo-600 dark:text-indigo-400">Upload: <strong>${ulStr}</strong></div>
+          <div>Ping RTT: <strong>${pingStr}</strong> | Jitter: <strong>${jitterStr}</strong></div>
+          <div>Packet Loss: <strong>${lossStr}</strong></div>
+          ${test.serving_rat || test.operator ? `<div class="text-slate-500 dark:text-slate-400 text-[10px] mt-1">${test.serving_rat || ''} ${test.operator || ''} ${test.serving_pci !== null && test.serving_pci !== undefined ? `(PCI ${test.serving_pci})` : ''}</div>` : ''}
+          <div class="text-slate-400 text-[9px] mt-0.5">${test.timestamp_raw || ''}</div>
+        </div>`,
+        { direction: 'top', offset: [0, -14] }
+      );
+
+      marker.addTo(qoeLayer);
+    });
+  }, [qoeTests, overlays.qoeTests]);
+
+  // Center/pan map when a coordinate is selected from external components (e.g. QoE table)
+  useEffect(() => {
+    if (focusedCoordinate && mapInstanceRef.current) {
+      mapInstanceRef.current.setView([focusedCoordinate.lat, focusedCoordinate.lon], 16, { animate: true });
+    }
+  }, [focusedCoordinate]);
+
   // Fit bounds when valid GPS points change or reset button is clicked
   const handleFitBounds = useCallback(() => {
     if (!mapInstanceRef.current || validGpsPoints.length === 0) return;
@@ -614,6 +697,19 @@ export const MapView: React.FC<MapViewProps> = ({
             >
               <Radio className="w-3 h-3 text-sky-500 dark:text-sky-400" />
               <span>Cell Sites</span>
+            </button>
+
+            <button
+              onClick={() => setOverlays((prev) => ({ ...prev, qoeTests: !prev.qoeTests }))}
+              title="Toggle Active Speed & QoE Test Markers"
+              className={`px-2 py-1 rounded flex items-center gap-1 transition-colors text-[11px] ${
+                overlays.qoeTests
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Activity className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
+              <span>Speed Tests {qoeTests.length > 0 ? `(${qoeTests.length})` : ''}</span>
             </button>
           </div>
         </div>

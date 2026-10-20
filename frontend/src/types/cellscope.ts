@@ -169,6 +169,67 @@ export interface DatasetSummary {
   telemetry_gaps_count?: number;
   missing_values_summary?: Record<string, number>;
   measurement_provenance?: Record<string, any>;
+  qoe_summary?: QoePerformanceSummary | null;
+}
+
+export interface QoeTestRecord {
+  id: number;
+  session_id?: number | null;
+  timestamp_raw: string;
+  timestamp_ms?: number | null;
+  test_type: string;
+  test_status: string;
+  skipped_reason?: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  gps_accuracy_m?: number | null;
+  has_valid_gps: boolean;
+  serving_rat?: string | null;
+  serving_pci?: number | null;
+  serving_channel?: number | null;
+  serving_rsrp_dbm?: number | null;
+  serving_rsrq_db?: number | null;
+  serving_sinr_db?: number | null;
+  operator?: string | null;
+  endpoint_url?: string | null;
+  download_mbps: number | null;
+  upload_mbps: number | null;
+  download_bytes?: number | null;
+  upload_bytes?: number | null;
+  download_duration_ms?: number | null;
+  upload_duration_ms?: number | null;
+  ping_latency_ms: number | null;
+  rtt_mean_ms?: number | null;
+  rtt_p95_ms?: number | null;
+  jitter_ms: number | null;
+  packet_loss_pct: number | null;
+  probes_attempted?: number | null;
+  probes_successful?: number | null;
+  classification?: string | null;
+  data_provenance: string;
+}
+
+export interface QoePerformanceSummary {
+  total_tests: number;
+  completed_tests: number;
+  failed_tests: number;
+  skipped_tests: number;
+  has_speed_data: boolean;
+  has_ping_data: boolean;
+  avg_ping_ms: number | null;
+  min_ping_ms: number | null;
+  max_ping_ms: number | null;
+  median_ping_ms: number | null;
+  avg_jitter_ms: number | null;
+  avg_packet_loss_pct: number | null;
+  avg_download_mbps: number | null;
+  min_download_mbps: number | null;
+  max_download_mbps: number | null;
+  avg_upload_mbps: number | null;
+  min_upload_mbps: number | null;
+  max_upload_mbps: number | null;
+  total_download_bytes: number;
+  total_upload_bytes: number;
 }
 
 export interface ExtendedDatasetAnalysis {
@@ -180,12 +241,14 @@ export interface ExtendedDatasetAnalysis {
   weak_segments: WeakCoverageSegment[];
   per_cell_stats: PerCellStat[];
   data_quality: DataQualityReport;
+  qoe_tests: QoeTestRecord[];
 }
 
 export interface IngestResponse {
   dataset_id: string;
   summary: DatasetSummary;
   sample_measurements: MeasurementPoint[];
+  qoe_tests?: QoeTestRecord[];
 }
 
 export interface AvailableDatasetInfo {
@@ -218,6 +281,7 @@ export interface MapOverlayState {
   handovers: boolean;
   cellSites: boolean;
   taUncertainty: boolean;
+  qoeTests: boolean;
 }
 
 export interface EstimatedCellSite {

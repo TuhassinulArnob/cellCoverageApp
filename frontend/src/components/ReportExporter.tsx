@@ -166,9 +166,55 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ summary }) => {
           </div>
         </div>
 
+        {/* Active QoE / Speed Performance Section */}
+        {summary.qoe_summary && summary.qoe_summary.total_tests > 0 && (
+          <div className="mb-6">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
+              3. Active Network QoE & Speed Performance (Bounded Testing)
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono mb-3">
+              <div className="bg-slate-50 dark:bg-slate-950/80 p-3 rounded border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-500 text-[10px] block">TEST COUNT</span>
+                <span className="text-slate-900 dark:text-white font-bold text-base">
+                  {summary.qoe_summary.completed_tests} / {summary.qoe_summary.total_tests} passed
+                </span>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-950/80 p-3 rounded border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-500 text-[10px] block">MEAN / MAX DOWNLOAD</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-bold text-base">
+                  {summary.qoe_summary.avg_download_mbps !== null ? `${summary.qoe_summary.avg_download_mbps} Mbps` : 'N/A'}
+                </span>
+                {summary.qoe_summary.max_download_mbps !== null && (
+                  <span className="text-[10px] text-slate-500 block">Peak: {summary.qoe_summary.max_download_mbps} Mbps</span>
+                )}
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-950/80 p-3 rounded border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-500 text-[10px] block">MEAN / MAX UPLOAD</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-base">
+                  {summary.qoe_summary.avg_upload_mbps !== null ? `${summary.qoe_summary.avg_upload_mbps} Mbps` : 'N/A'}
+                </span>
+                {summary.qoe_summary.max_upload_mbps !== null && (
+                  <span className="text-[10px] text-slate-500 block">Peak: {summary.qoe_summary.max_upload_mbps} Mbps</span>
+                )}
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-950/80 p-3 rounded border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-500 text-[10px] block">MEAN PING / JITTER</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold text-base">
+                  {summary.qoe_summary.avg_ping_ms !== null ? `${summary.qoe_summary.avg_ping_ms} ms` : 'N/A'}
+                </span>
+                {summary.qoe_summary.avg_jitter_ms !== null && (
+                  <span className="text-[10px] text-slate-500 block">Jitter: {summary.qoe_summary.avg_jitter_ms} ms</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Engineering Audit & Methodology */}
         <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">3. Engineering Certification & Audit Notes</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            {summary.qoe_summary && summary.qoe_summary.total_tests > 0 ? '4. Engineering Certification & Audit Notes' : '3. Engineering Certification & Audit Notes'}
+          </h4>
           <p>
             This report represents verified physical cellular field measurements processed according to 3GPP TS 36.133 (E-UTRA requirements for support of radio resource management) and 3GPP TS 38.133 (5G NR). Coordinates are mapped on WGS84 datum. Handover trigger rates reflect Layer-3 measurement report indications.
           </p>

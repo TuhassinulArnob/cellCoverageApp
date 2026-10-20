@@ -135,6 +135,66 @@ class DataQualityReport(BaseModel):
     coordinate_system: str = "WGS84 (EPSG:4326)"
 
 
+class QoeTestRecord(BaseModel):
+    id: int
+    session_id: Optional[int] = None
+    timestamp_raw: str
+    timestamp_ms: Optional[int] = None
+    test_type: str = "FULL_CYCLE"
+    test_status: str = "COMPLETED"
+    skipped_reason: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    gps_accuracy_m: Optional[float] = None
+    has_valid_gps: bool = False
+    serving_rat: Optional[str] = None
+    serving_pci: Optional[int] = None
+    serving_channel: Optional[int] = None
+    serving_rsrp_dbm: Optional[float] = None
+    serving_rsrq_db: Optional[float] = None
+    serving_sinr_db: Optional[float] = None
+    operator: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    download_mbps: Optional[float] = None
+    upload_mbps: Optional[float] = None
+    download_bytes: Optional[int] = None
+    upload_bytes: Optional[int] = None
+    download_duration_ms: Optional[int] = None
+    upload_duration_ms: Optional[int] = None
+    ping_latency_ms: Optional[float] = None
+    rtt_mean_ms: Optional[float] = None
+    rtt_p95_ms: Optional[float] = None
+    jitter_ms: Optional[float] = None
+    packet_loss_pct: Optional[float] = None
+    probes_attempted: Optional[int] = None
+    probes_successful: Optional[int] = None
+    classification: Optional[str] = None
+    data_provenance: str = "MEASURED"
+
+
+class QoePerformanceSummary(BaseModel):
+    total_tests: int = 0
+    completed_tests: int = 0
+    failed_tests: int = 0
+    skipped_tests: int = 0
+    has_speed_data: bool = False
+    has_ping_data: bool = False
+    avg_ping_ms: Optional[float] = None
+    min_ping_ms: Optional[float] = None
+    max_ping_ms: Optional[float] = None
+    median_ping_ms: Optional[float] = None
+    avg_jitter_ms: Optional[float] = None
+    avg_packet_loss_pct: Optional[float] = None
+    avg_download_mbps: Optional[float] = None
+    min_download_mbps: Optional[float] = None
+    max_download_mbps: Optional[float] = None
+    avg_upload_mbps: Optional[float] = None
+    min_upload_mbps: Optional[float] = None
+    max_upload_mbps: Optional[float] = None
+    total_download_bytes: int = 0
+    total_upload_bytes: int = 0
+
+
 class DatasetSummary(BaseModel):
     dataset_id: str
     filename: str
@@ -173,6 +233,7 @@ class DatasetSummary(BaseModel):
     telemetry_gaps_count: int = 0
     missing_values_summary: Dict[str, int] = Field(default_factory=dict)
     measurement_provenance: Dict[str, Any] = Field(default_factory=dict)
+    qoe_summary: Optional[QoePerformanceSummary] = None
 
 
 class ExtendedDatasetAnalysis(BaseModel):
@@ -184,12 +245,14 @@ class ExtendedDatasetAnalysis(BaseModel):
     weak_segments: List[WeakCoverageSegment] = Field(default_factory=list)
     per_cell_stats: List[PerCellStat] = Field(default_factory=list)
     data_quality: DataQualityReport
+    qoe_tests: List[QoeTestRecord] = Field(default_factory=list)
 
 
 class IngestResponse(BaseModel):
     dataset_id: str
     summary: DatasetSummary
     sample_measurements: List[MeasurementPoint] = Field(default_factory=list)
+    qoe_tests: List[QoeTestRecord] = Field(default_factory=list)
 
 
 class AvailableDatasetInfo(BaseModel):

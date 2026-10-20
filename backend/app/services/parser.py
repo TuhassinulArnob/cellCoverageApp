@@ -70,6 +70,21 @@ CANONICAL_FIELD_PATTERNS = {
     "altitude": [
         r"^altitude\s*\(\s*m\s*\)\s*$", r"^altitude\s*$", r"^alt\s*$"
     ],
+    "ping_latency_ms": [
+        r"^ping\s*(\(\s*ms\s*\))?$", r"^ping_latency_ms$", r"^latency_ms$", r"^rtt_ms$", r"^rtt_median_ms$", r"^ping[\s_]+latency.*"
+    ],
+    "download_mbps": [
+        r"^download\s*(\(\s*mbps\s*\))?$", r"^download_mbps$", r"^download_throughput_mbps$", r"^dl_mbps$", r"^download[\s_]+speed.*"
+    ],
+    "upload_mbps": [
+        r"^upload\s*(\(\s*mbps\s*\))?$", r"^upload_mbps$", r"^upload_throughput_mbps$", r"^ul_mbps$", r"^upload[\s_]+speed.*"
+    ],
+    "jitter_ms": [
+        r"^jitter\s*(\(\s*ms\s*\))?$", r"^jitter_ms$", r"^jitter[\s_]*.*"
+    ],
+    "packet_loss_pct": [
+        r"^packet[\s_]+loss\s*(\(\s*%\s*\))?$", r"^packet_loss_pct$", r"^probe_loss_pct$", r"^probe[\s_]+loss\s*(\(\s*%\s*\))?$"
+    ],
 }
 
 
@@ -158,6 +173,18 @@ def parse_csv_to_dataframe(
     headers to canonical field names where possible.
     Section-aware: safely parses multi-section extended CellScope v3.0 exports as well as legacy single-header files.
     """
+    df, mapping, unmapped, _ = parse_csv_with_raw_text(content_bytes=content_bytes, file_path=file_path)
+    return df, mapping, unmapped
+
+
+def parse_csv_with_raw_text(
+    content_bytes: Optional[bytes] = None,
+    file_path: Optional[str] = None
+) -> Tuple[pd.DataFrame, Dict[str, str], List[str], str]:
+    """
+    Parses CSV and returns (df, mapping, unmapped, raw_text) so subsequent section
+    extractors (e.g. Active QoE, Cell Transitions) have access to the complete payload.
+    """
     if content_bytes is not None:
         raw_text = content_bytes.decode("utf-8", errors="replace")
     elif file_path is not None:
@@ -174,4 +201,239 @@ def parse_csv_to_dataframe(
     )
 
     mapping, unmapped = detect_column_mapping(list(df.columns))
-    return df, mapping, unmapped
+    return df, mapping, unmapped, raw_text
+
+
+def extract_qoe_records(
+    raw_text: str,
+    df: Optional[pd.DataFrame] = None,
+    mapping: Optional[Dict[str, str]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Extracts active network QoE speed, ping, latency, and reliability test records.
+    Supports both multi-section CellScope v3.0 exports (with '# Active QoE & Congestion Section')
+    and single-sheet tabular CSVs that contain speed/ping columns.
+    Never fabricates measurements or replaces missing values with zero.
+    """
+    import csv
+
+    records: List[Dict[str, Any]] = []
+
+    # 1. Look for # Active QoE section in raw_text
+    lines = raw_text.splitlines()
+    qoe_lines: List[str] = []
+    in_qoe = False
+
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            lower = s.lower()
+            if "active qoe" in lower or "qoe & congestion" in lower:
+                in_qoe = True
+                continue
+            elif in_qoe:
+                break
+        elif in_qoe:
+            qoe_lines.append(line)
+
+    if qoe_lines:
+        reader = csv.DictReader(io.StringIO("\n".join(qoe_lines)))
+        row_idx = 1
+        for row in reader:
+            if not row:
+                continue
+
+            # Skip malformed lines (e.g. malformed single-token lines or rows without test_id / timestamp)
+            raw_id = row.get("test_id")
+            if not raw_id or "MALFORMED" in str(raw_id).upper():
+                continue
+
+            try:
+                test_id = int(float(str(raw_id).strip()))
+            except (ValueError, TypeError):
+                test_id = row_idx
+
+            row_idx += 1
+
+            # Extract timestamps
+            ts_raw = str(row.get("timestamp_iso") or row.get("timestamp") or "").strip()
+            ts_ms_val = clean_numeric_value(row.get("timestamp_epoch_ms") or row.get("timestamp_ms"))
+            ts_ms = int(ts_ms_val) if ts_ms_val is not None else None
+
+            # Test metadata
+            test_type = str(row.get("test_trigger") or row.get("test_type") or "FULL_CYCLE").strip()
+            test_status = str(row.get("test_status") or "COMPLETED").strip().upper()
+            skipped_reason = row.get("skipped_reason")
+            if skipped_reason:
+                skipped_reason = str(skipped_reason).strip() or None
+
+            # Location
+            lat = clean_numeric_value(row.get("latitude"))
+            lon = clean_numeric_value(row.get("longitude"))
+            acc = clean_numeric_value(row.get("gps_accuracy_m") or row.get("accuracy"))
+            has_valid_gps = bool(lat is not None and lon is not None and (abs(lat) > 0.0001 or abs(lon) > 0.0001))
+
+            # Radio / Cellular context
+            serving_rat = row.get("serving_rat")
+            if serving_rat:
+                serving_rat = str(serving_rat).strip() or None
+
+            pci_val = clean_numeric_value(row.get("serving_pci") or row.get("pci"))
+            serving_pci = int(pci_val) if pci_val is not None else None
+
+            ch_val = clean_numeric_value(row.get("serving_channel") or row.get("earfcn") or row.get("channel"))
+            serving_ch = int(ch_val) if ch_val is not None else None
+
+            rsrp = clean_numeric_value(row.get("serving_rsrp_dbm") or row.get("rsrp_dbm") or row.get("rsrp"))
+            rsrq = clean_numeric_value(row.get("serving_rsrq_db") or row.get("rsrq_db") or row.get("rsrq"))
+            sinr = clean_numeric_value(row.get("serving_sinr_db") or row.get("sinr_db") or row.get("cinr_db") or row.get("cinr"))
+            operator = row.get("operator") or row.get("network_operator")
+            if operator:
+                operator = str(operator).strip() or None
+
+            endpoint = row.get("endpoint_url")
+            if endpoint:
+                endpoint = str(endpoint).strip() or None
+
+            # Throughput
+            dl_mbps = clean_numeric_value(row.get("download_throughput_mbps") or row.get("download_mbps") or row.get("dl_mbps"))
+            ul_mbps = clean_numeric_value(row.get("upload_throughput_mbps") or row.get("upload_mbps") or row.get("ul_mbps"))
+
+            dl_bytes_val = clean_numeric_value(row.get("download_bytes_transferred") or row.get("download_bytes") or row.get("dl_bytes"))
+            dl_bytes = int(dl_bytes_val) if dl_bytes_val is not None else None
+
+            ul_bytes_val = clean_numeric_value(row.get("upload_bytes_transferred") or row.get("upload_bytes") or row.get("ul_bytes"))
+            ul_bytes = int(ul_bytes_val) if ul_bytes_val is not None else None
+
+            dl_dur_val = clean_numeric_value(row.get("download_duration_ms") or row.get("dl_duration_ms"))
+            dl_duration_ms = int(dl_dur_val) if dl_dur_val is not None else None
+
+            ul_dur_val = clean_numeric_value(row.get("upload_duration_ms") or row.get("ul_duration_ms"))
+            ul_duration_ms = int(ul_dur_val) if ul_dur_val is not None else None
+
+            # Latency & Reliability
+            ping_ms = clean_numeric_value(row.get("rtt_median_ms") or row.get("latency_ms") or row.get("ping_latency_ms") or row.get("rtt_ms") or row.get("ping_ms"))
+            rtt_mean = clean_numeric_value(row.get("rtt_mean_ms"))
+            rtt_p95 = clean_numeric_value(row.get("rtt_p95_ms"))
+            jitter = clean_numeric_value(row.get("jitter_ms"))
+            loss_pct = clean_numeric_value(row.get("probe_loss_pct") or row.get("packet_loss_pct"))
+
+            probes_att_val = clean_numeric_value(row.get("probes_attempted"))
+            probes_att = int(probes_att_val) if probes_att_val is not None else None
+
+            probes_succ_val = clean_numeric_value(row.get("probes_successful"))
+            probes_succ = int(probes_succ_val) if probes_succ_val is not None else None
+
+            classification = row.get("classification")
+            if classification:
+                classification = str(classification).strip() or None
+
+            data_prov = str(row.get("data_provenance") or "MEASURED").strip()
+
+            records.append({
+                "id": test_id,
+                "session_id": int(clean_numeric_value(row.get("session_id")) or 1),
+                "timestamp_raw": ts_raw,
+                "timestamp_ms": ts_ms,
+                "test_type": test_type,
+                "test_status": test_status,
+                "skipped_reason": skipped_reason,
+                "latitude": lat,
+                "longitude": lon,
+                "gps_accuracy_m": acc,
+                "has_valid_gps": has_valid_gps,
+                "serving_rat": serving_rat,
+                "serving_pci": serving_pci,
+                "serving_channel": serving_ch,
+                "serving_rsrp_dbm": rsrp,
+                "serving_rsrq_db": rsrq,
+                "serving_sinr_db": sinr,
+                "operator": operator,
+                "endpoint_url": endpoint,
+                "download_mbps": dl_mbps,
+                "upload_mbps": ul_mbps,
+                "download_bytes": dl_bytes,
+                "upload_bytes": ul_bytes,
+                "download_duration_ms": dl_duration_ms,
+                "upload_duration_ms": ul_duration_ms,
+                "ping_latency_ms": ping_ms,
+                "rtt_mean_ms": rtt_mean,
+                "rtt_p95_ms": rtt_p95,
+                "jitter_ms": jitter,
+                "packet_loss_pct": loss_pct,
+                "probes_attempted": probes_att,
+                "probes_successful": probes_succ,
+                "classification": classification,
+                "data_provenance": data_prov
+            })
+
+    # 2. If no QoE records found from section, check if main dataframe has speed/ping columns
+    elif df is not None and mapping is not None:
+        dl_col = mapping.get("download_mbps")
+        ul_col = mapping.get("upload_mbps")
+        ping_col = mapping.get("ping_latency_ms")
+        jitter_col = mapping.get("jitter_ms")
+        loss_col = mapping.get("packet_loss_pct")
+
+        if any([dl_col, ul_col, ping_col]):
+            time_col = mapping.get("timestamp")
+            lat_col = mapping.get("latitude")
+            lon_col = mapping.get("longitude")
+            pci_col = mapping.get("serving_cell_id")
+            rsrp_col = mapping.get("rsrp")
+            rsrq_col = mapping.get("rsrq")
+            cinr_col = mapping.get("cinr")
+            rat_col = mapping.get("network_type")
+            op_col = mapping.get("operator")
+
+            for idx, row in df.iterrows():
+                dl_val = clean_numeric_value(row[dl_col]) if dl_col and dl_col in row else None
+                ul_val = clean_numeric_value(row[ul_col]) if ul_col and ul_col in row else None
+                ping_val = clean_numeric_value(row[ping_col]) if ping_col and ping_col in row else None
+
+                # Only create a record if at least one measurement is present
+                if dl_val is not None or ul_val is not None or ping_val is not None:
+                    lat_val = clean_numeric_value(row[lat_col]) if lat_col and lat_col in row else None
+                    lon_val = clean_numeric_value(row[lon_col]) if lon_col and lon_col in row else None
+                    has_valid_gps = bool(lat_val is not None and lon_val is not None and (abs(lat_val) > 0.0001 or abs(lon_val) > 0.0001))
+
+                    records.append({
+                        "id": int(idx) + 1,
+                        "session_id": 1,
+                        "timestamp_raw": str(row[time_col]) if time_col and time_col in row and not pd.isna(row[time_col]) else "",
+                        "timestamp_ms": None,
+                        "test_type": "SPEED_TEST",
+                        "test_status": "COMPLETED",
+                        "skipped_reason": None,
+                        "latitude": lat_val,
+                        "longitude": lon_val,
+                        "gps_accuracy_m": None,
+                        "has_valid_gps": has_valid_gps,
+                        "serving_rat": str(row[rat_col]).strip() if rat_col and rat_col in row and not pd.isna(row[rat_col]) else None,
+                        "serving_pci": int(clean_numeric_value(row[pci_col])) if pci_col and pci_col in row and clean_numeric_value(row[pci_col]) is not None else None,
+                        "serving_channel": None,
+                        "serving_rsrp_dbm": clean_numeric_value(row[rsrp_col]) if rsrp_col and rsrp_col in row else None,
+                        "serving_rsrq_db": clean_numeric_value(row[rsrq_col]) if rsrq_col and rsrq_col in row else None,
+                        "serving_sinr_db": clean_numeric_value(row[cinr_col]) if cinr_col and cinr_col in row else None,
+                        "operator": str(row[op_col]).strip() if op_col and op_col in row and not pd.isna(row[op_col]) else None,
+                        "endpoint_url": None,
+                        "download_mbps": dl_val,
+                        "upload_mbps": ul_val,
+                        "download_bytes": None,
+                        "upload_bytes": None,
+                        "download_duration_ms": None,
+                        "upload_duration_ms": None,
+                        "ping_latency_ms": ping_val,
+                        "rtt_mean_ms": ping_val,
+                        "rtt_p95_ms": None,
+                        "jitter_ms": clean_numeric_value(row[jitter_col]) if jitter_col and jitter_col in row else None,
+                        "packet_loss_pct": clean_numeric_value(row[loss_col]) if loss_col and loss_col in row else None,
+                        "probes_attempted": None,
+                        "probes_successful": None,
+                        "classification": None,
+                        "data_provenance": "MEASURED"
+                    })
+
+    return records
