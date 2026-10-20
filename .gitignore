@@ -62,6 +62,7 @@ local.properties
 .idea/caches/
 *.apk
 !/CellScope-v2.0-final.apk
+!/CellScope-v3.0.apk
 *.aar
 *.aab
 *.dex

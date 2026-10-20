@@ -3,11 +3,42 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20FastAPI%20%7C%20React-green.svg)](#platform-architecture)
 [![Version](https://img.shields.io/badge/Release-v3.0.0%20Production-success.svg)](#what-is-new-in-version-30)
+[![Download APK v3.0](https://img.shields.io/badge/Download-CellScope%20v3.0%20APK-0284C7?logo=android&logoColor=white)](CellScope-v3.0.apk)
+[![Archive v2.0](https://img.shields.io/badge/Archive-CellScope%20v2.0%20APK-64748B?logo=android&logoColor=white)](CellScope-v2.0-final.apk)
 [![Documentation](https://img.shields.io/badge/Technical%20Report-PDF%20Deliverable-0284C7?logo=adobeacrobatreader&logoColor=white)](docs/CellScope_5G_v3_Technical_Report.pdf)
 
 **CellScope 5G** is an enterprise-grade cellular field-testing, RF optimization, and multi-generation network intelligence platform engineered for Radio Access Network (RAN) engineers, RF planning specialists, and field drive-test technicians. It pairs a **native Kotlin Android field application** with an **asynchronous FastAPI post-processing microservice** and an **interactive MapLibre GIS web dashboard** for deep post-processing and drive-test evaluation.
 
 📄 **Comprehensive Technical Specification:** Read the complete 5-page publication-grade PDF report at [`docs/CellScope_5G_v3_Technical_Report.pdf`](docs/CellScope_5G_v3_Technical_Report.pdf).
+
+---
+
+## Latest Android APK — v3.0
+
+📦 **Download Latest Release:** [`CellScope-v3.0.apk`](CellScope-v3.0.apk) (~48.9 MB, verified build)
+
+* **Version:** `v3.0.0-production` (Build 2026.10, API 26–35)
+* **Build Variant:** Debug (`assembleDebug`) — signed with the standard Android debug keystore for seamless installation on test devices and developer handsets without requiring custom release key provisioning.
+* **Core v3.0 Features & Upgrades:**
+  * **Automated Survey QoE Engine:** Automatically starts bounded active download/upload throughput, RTT, jitter, and probe loss tests upon survey start; configurable 5m/10m/custom intervals with Foreground Service persistence; removed the legacy 50 MB daily cap.
+  * **Restored RF Frequency Graph:** Smooth cubic Bézier bell-shaped channel envelopes with multi-band smart auto-windowing, standard telecom dynamic bounds (-140 to -40 dBm), 16dp minimum visual half-width, interactive touch inspection, and dual-theme adaptive styling.
+  * **6-Section Multi-CSV Engine:** Resilient multi-section survey parser and exporter (`[SURVEY_METADATA]`, `[TELEMETRY_SAMPLES]`, `[ACTIVE_QOE_TESTS]`, `[MOBILITY_EVENTS]`, `[SERVICE_HOLES]`, `[ESTIMATED_TOWERS]`).
+  * **3GPP TS 45.005 GSM ARFCN Classification:** Precise discrimination of P-GSM 900, E-GSM 900, GSM 850, and DCS 1800.
+  * **LTE CRS Modulo-3 & Reuse Analytics:** Hexagonal reuse distance ($D = R\sqrt{3N}$) and CRS subcarrier collision analysis ($v_{\text{shift}} = N_{\text{ID}}^{\text{cell}} \bmod 3$).
+  * **Evidence-Based Traffic Intelligence:** Real-time sector congestion classification and stronger neighbor ("Why Not Connected?") diagnostics.
+
+### Android Installation Instructions
+1. Download [`CellScope-v3.0.apk`](CellScope-v3.0.apk) directly to your Android device (or install via ADB: `adb install -r CellScope-v3.0.apk`).
+2. Open your device's **Files** or **Downloads** app and tap `CellScope-v3.0.apk`.
+3. If prompted by Android system security, enable **"Install unknown apps"** / **"Allow from this source"** for your browser or file manager.
+4. Tap **Install** (or **Update** if updating from a prior installation).
+5. Grant the requested runtime permissions on initial launch:
+   - **Location (Allow all the time / While in use):** Required for GNSS drive-test route tracking.
+   - **Phone / Read Phone State:** Required for raw physical-layer telephony signal metrics and carrier frequency resolution.
+   - **Notifications:** Required for the ongoing survey & QoE background Foreground Service.
+
+### Historical Archive
+* 📦 **Version 2.0 (Historical Final):** [`CellScope-v2.0-final.apk`](CellScope-v2.0-final.apk) (~48.3 MB) — preserved as a historical reference artifact for backward-compatibility audits.
 
 ---
 
@@ -137,7 +168,7 @@ flowchart TD
 All verification suites have been executed and verified in place:
 
 * **Android Unit Tests:** **272 / 272 Passed** (100% success rate across 52 test suites via `.\android\gradlew.bat testDebugUnitTest` in 50s, 0 failures).
-* **Android Debug APK Assembly:** **BUILD SUCCESSFUL** via `assembleDebug` (`app-debug.apk` ~49.8 MB).
+* **Android Debug APK Assembly:** **BUILD SUCCESSFUL** via `assembleDebug` (`CellScope-v3.0.apk` ~48.9 MB / 51,231,052 bytes).
 * **FastAPI Backend Analytics:** **19 / 19 Passed** (`python -m pytest backend/tests` in 7.00s, 0 failures).
 * **Frontend Production Build:** **BUILD SUCCESSFUL** (`npm run build`, 1,932 modules transformed in 1.48s, 0 errors).
 * **End-to-End CSV Regression:** **100% Passed** (`MultiSectionCsvRegressionTest` validating 6-section survey dataset).
@@ -146,7 +177,13 @@ All verification suites have been executed and verified in place:
 
 ## Getting Started
 
-### 1. Building and Testing the Android Application
+### 1. Direct Android Installation
+Transfer [`CellScope-v3.0.apk`](CellScope-v3.0.apk) to an Android device (API 26+) or install via ADB:
+```bash
+adb install -r CellScope-v3.0.apk
+```
+
+### 2. Building from Source
 ```bash
 # Set JDK 21+ environment (e.g. Android Studio JBR)
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
@@ -157,9 +194,9 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 # Assemble Debug APK
 .\android\gradlew.bat -p android assembleDebug
 ```
-The output APK is generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
+The output APK is generated at `android/app/build/outputs/apk/debug/app-debug.apk` and copied to `CellScope-v3.0.apk`.
 
-### 2. Running Backend Analytics Tests & Dev Server
+### 3. Running Backend Analytics Tests & Dev Server
 ```bash
 # Run backend pytest suite (19 tests)
 python -m pytest backend/tests
@@ -168,7 +205,7 @@ python -m pytest backend/tests
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Running Web GIS Frontend
+### 4. Running Web GIS Frontend
 ```bash
 cd frontend
 npm install
@@ -177,7 +214,7 @@ npm run dev
 npm run build
 ```
 
-### 4. Generating the Comprehensive Technical PDF
+### 5. Generating the Comprehensive Technical PDF
 ```bash
 python backend/scripts/generate_technical_report.py
 ```
