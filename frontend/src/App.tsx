@@ -249,7 +249,7 @@ export const App: React.FC = () => {
   ].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F5F7FB] dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-150">
       {/* Top Navbar */}
       <Navbar
         currentTab={currentTab}
@@ -261,8 +261,8 @@ export const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-5 lg:p-6">
         {loading && !summary ? (
-          <div className="flex flex-col items-center justify-center h-96 gap-3 text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+          <div className="flex flex-col items-center justify-center h-96 gap-3 text-slate-600 dark:text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin text-cyan-600 dark:text-cyan-400" />
             <p className="text-sm font-medium">Loading CellScope LTE Analytics Engine...</p>
           </div>
         ) : (
@@ -333,10 +333,10 @@ export const App: React.FC = () => {
       />
 
       {/* Engineering Footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 py-3.5 px-6 text-xs text-slate-500">
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3.5 px-6 text-xs text-slate-500 transition-colors duration-150">
         <div className="max-w-[1720px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-400">CellScope-5G RAN Analytics Platform</span>
+            <span className="font-semibold text-slate-700 dark:text-slate-400">CellScope-5G RAN Analytics Platform</span>
             <span>•</span>
             <span>3GPP TS 36.133 / TS 38.133 & TS 36.101 RF Standards</span>
             <span>•</span>

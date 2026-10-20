@@ -9,6 +9,7 @@ import type {
   EstimatedCellSite,
 } from '../types/cellscope';
 import { estimateCellSites, resolveEarfcn, timingAdvanceToMeters } from '../utils/telecom';
+import { useTheme } from '../context/useTheme';
 import {
   Layers,
   AlertCircle,
@@ -41,6 +42,7 @@ export const MapView: React.FC<MapViewProps> = ({
   onOpenFilters,
   activeFilterCount = 0,
 }) => {
+  const { theme } = useTheme();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
 
@@ -54,8 +56,17 @@ export const MapView: React.FC<MapViewProps> = ({
   const [activeMetric, setActiveMetric] = useState<ActiveMetric>('rsrp');
   const [selectedPoint, setSelectedPoint] = useState<MeasurementPoint | null>(null);
   const [selectedSite, setSelectedSite] = useState<EstimatedCellSite | null>(null);
-  const [isDarkBasemap, setIsDarkBasemap] = useState<boolean>(true);
+  const [prevTheme, setPrevTheme] = useState(theme);
+  const [basemapOverride, setBasemapOverride] = useState<boolean | null>(null);
   const [tileError, setTileError] = useState<boolean>(false);
+
+  // If the global theme changes, reset the manual basemap override so map syncs with global theme
+  if (prevTheme !== theme) {
+    setPrevTheme(theme);
+    setBasemapOverride(null);
+  }
+
+  const isDarkBasemap = basemapOverride !== null ? basemapOverride : (theme === 'dark');
 
   // Layer Overlay visibility states
   const [overlays, setOverlays] = useState<MapOverlayState>({
@@ -107,7 +118,6 @@ export const MapView: React.FC<MapViewProps> = ({
       if (v >= 0) return '#f59e0b';
       return '#ef4444';
     } else if (metric === 'pci') {
-      // Color-code by PCI CRS modulo 3 shift
       if (point.serving_cell_id === null) return '#64748b';
       const shift = ((point.serving_cell_id % 3) + 3) % 3;
       if (shift === 0) return '#06b6d4'; // Cyan
@@ -116,19 +126,18 @@ export const MapView: React.FC<MapViewProps> = ({
     } else if (metric === 'ta') {
       const ta = point.timing_advance;
       if (ta === null || ta === undefined) return '#64748b';
-      if (ta <= 2) return '#10b981'; // Near site (< 160m)
-      if (ta <= 5) return '#84cc16'; // Medium (< 400m)
-      if (ta <= 10) return '#f59e0b'; // Distant (< 800m)
-      return '#ef4444'; // Far (> 800m)
+      if (ta <= 2) return '#10b981';
+      if (ta <= 5) return '#84cc16';
+      if (ta <= 10) return '#f59e0b';
+      return '#ef4444';
     } else if (metric === 'speed') {
       const s = point.speed_kmh;
       if (s === null) return '#64748b';
-      if (s < 10) return '#38bdf8'; // Pedestrian
-      if (s < 40) return '#10b981'; // Urban drive
-      if (s < 70) return '#f59e0b'; // Arterial
-      return '#ef4444'; // Highway
+      if (s < 10) return '#38bdf8';
+      if (s < 40) return '#10b981';
+      if (s < 70) return '#f59e0b';
+      return '#ef4444';
     } else {
-      // RAT / Tech
       const gen = point.network_gen || '';
       if (gen.includes('5G')) return '#a855f7';
       if (gen.includes('4G')) return '#0ea5e9';
@@ -233,7 +242,6 @@ export const MapView: React.FC<MapViewProps> = ({
         return;
       }
 
-      // Draw corridor polyline between start and end of weak segment
       const corridor = L.polyline(
         [
           [seg.start_lat, seg.start_lon],
@@ -247,7 +255,6 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       );
 
-      // Warning circle at start
       const startCircle = L.circleMarker([seg.start_lat, seg.start_lon], {
         radius: 10,
         fillColor: '#ea580c',
@@ -259,12 +266,12 @@ export const MapView: React.FC<MapViewProps> = ({
 
       const tooltipContent = `
         <div class="text-xs font-mono p-1">
-          <div class="font-bold text-amber-400 flex items-center gap-1">⚠️ Weak Coverage Zone #${seg.id}</div>
-          <div class="mt-1 text-slate-200">Samples: <strong>${seg.sample_count}</strong></div>
-          <div>Min RSRP: <strong class="text-red-400">${seg.min_rsrp_dbm} dBm</strong></div>
-          <div>Mean RSRP: <strong class="text-amber-300">${seg.mean_rsrp_dbm} dBm</strong></div>
+          <div class="font-bold text-amber-500 dark:text-amber-400 flex items-center gap-1">⚠️ Weak Coverage Zone #${seg.id}</div>
+          <div class="mt-1">Samples: <strong>${seg.sample_count}</strong></div>
+          <div>Min RSRP: <strong class="text-red-500 dark:text-red-400">${seg.min_rsrp_dbm} dBm</strong></div>
+          <div>Mean RSRP: <strong class="text-amber-500 dark:text-amber-300">${seg.mean_rsrp_dbm} dBm</strong></div>
           <div>Serving PCI: <strong>${seg.pci ?? 'N/A'}</strong></div>
-          <div class="text-[10px] text-slate-400 mt-1 italic">${seg.reason}</div>
+          <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 italic">${seg.reason}</div>
         </div>
       `;
 
@@ -284,14 +291,12 @@ export const MapView: React.FC<MapViewProps> = ({
 
     if (!overlays.handovers) return;
 
-    // Filter points that triggered handover or transitions from extendedAnalysis
     const hoPoints = validGpsPoints.filter((p) => p.handover_trigger === 1);
 
     hoPoints.forEach((point) => {
       const lat = point.latitude!;
       const lon = point.longitude!;
 
-      // Distinct diamond-like SVG icon or styled marker
       const hoIcon = L.divIcon({
         className: 'cellscope-ho-marker',
         html: `
@@ -324,11 +329,11 @@ export const MapView: React.FC<MapViewProps> = ({
 
       marker.bindTooltip(
         `<div class="text-xs font-mono p-1">
-          <div class="font-bold text-red-400 flex items-center gap-1">⚡ Handover Event</div>
-          <div class="text-white mt-1">Serving PCI: <strong>${point.serving_cell_id ?? 'Unknown'}</strong></div>
-          ${point.neighbor_cell_id ? `<div class="text-cyan-300">Target/Neighbor PCI: <strong>${point.neighbor_cell_id}</strong></div>` : ''}
-          <div class="text-slate-300">RSRP: <strong>${point.rsrp_dbm ?? 'N/A'} dBm</strong></div>
-          <div class="text-slate-400 text-[10px] mt-1">${point.timestamp_raw}</div>
+          <div class="font-bold text-red-500 dark:text-red-400 flex items-center gap-1">⚡ Handover Event</div>
+          <div class="mt-1">Serving PCI: <strong>${point.serving_cell_id ?? 'Unknown'}</strong></div>
+          ${point.neighbor_cell_id ? `<div class="text-cyan-600 dark:text-cyan-300">Target/Neighbor PCI: <strong>${point.neighbor_cell_id}</strong></div>` : ''}
+          <div>RSRP: <strong>${point.rsrp_dbm ?? 'N/A'} dBm</strong></div>
+          <div class="text-slate-500 dark:text-slate-400 text-[10px] mt-1">${point.timestamp_raw}</div>
         </div>`,
         { direction: 'top', offset: [0, -10] }
       );
@@ -349,17 +354,18 @@ export const MapView: React.FC<MapViewProps> = ({
 
     if (!overlays.cellSites) return;
 
+    const isDark = isDarkBasemap;
+
     estimatedSites.forEach((site) => {
-      // Cell Tower Tower Centroid Icon
       const towerIcon = L.divIcon({
         className: 'cellscope-tower-marker',
         html: `
           <div style="
             width: 32px;
             height: 32px;
-            background: #0f172a;
-            border: 2px solid #06b6d4;
-            box-shadow: 0 0 12px rgba(6, 182, 212, 0.6);
+            background: ${isDark ? '#0f172a' : '#ffffff'};
+            border: 2px solid ${isDark ? '#06b6d4' : '#0891b2'};
+            box-shadow: 0 2px 10px ${isDark ? 'rgba(6, 182, 212, 0.6)' : 'rgba(8, 145, 178, 0.4)'};
             border-radius: 8px;
             display: flex;
             flex-direction: column;
@@ -368,7 +374,7 @@ export const MapView: React.FC<MapViewProps> = ({
             cursor: pointer;
           ">
             <span style="font-size: 13px; line-height: 1;">📡</span>
-            <span style="color: #38bdf8; font-size: 8px; font-weight: bold; font-family: monospace;">${site.pci}</span>
+            <span style="color: ${isDark ? '#38bdf8' : '#0284c7'}; font-size: 8px; font-weight: bold; font-family: monospace;">${site.pci}</span>
           </div>
         `,
         iconSize: [32, 32],
@@ -377,14 +383,13 @@ export const MapView: React.FC<MapViewProps> = ({
 
       const towerMarker = L.marker([site.latitude, site.longitude], { icon: towerIcon });
 
-      // Estimated Coverage / Uncertainty Radius Circle
       const coverageCircle = L.circle([site.latitude, site.longitude], {
         radius: site.uncertaintyRadiusMeters,
-        color: '#06b6d4',
+        color: isDark ? '#06b6d4' : '#0891b2',
         weight: 1.5,
         dashArray: '6, 6',
-        fillColor: '#06b6d4',
-        fillOpacity: 0.08,
+        fillColor: isDark ? '#06b6d4' : '#0891b2',
+        fillOpacity: isDark ? 0.08 : 0.06,
       });
 
       const bandRes = resolveEarfcn(site.earfcn);
@@ -392,12 +397,12 @@ export const MapView: React.FC<MapViewProps> = ({
 
       towerMarker.bindTooltip(
         `<div class="text-xs font-mono p-1">
-          <div class="font-bold text-cyan-400 flex items-center gap-1">📡 Estimated Site: PCI ${site.pci}</div>
-          <div class="text-slate-300 mt-1">Carrier: <strong>${bandLabel}</strong></div>
-          <div class="text-slate-300">Observed Samples: <strong>${site.sampleCount}</strong></div>
-          <div class="text-slate-300">Peak RSRP: <strong class="text-emerald-400">${site.maxRsrp} dBm</strong></div>
-          <div class="text-slate-300">Mean RSRP: <strong>${site.meanRsrp} dBm</strong></div>
-          <div class="text-slate-400 text-[10px] mt-1">Coverage Radius: ~${site.uncertaintyRadiusMeters}m</div>
+          <div class="font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1">📡 Estimated Site: PCI ${site.pci}</div>
+          <div class="mt-1">Carrier: <strong>${bandLabel}</strong></div>
+          <div>Observed Samples: <strong>${site.sampleCount}</strong></div>
+          <div>Peak RSRP: <strong class="text-emerald-600 dark:text-emerald-400">${site.maxRsrp} dBm</strong></div>
+          <div>Mean RSRP: <strong>${site.meanRsrp} dBm</strong></div>
+          <div class="text-slate-500 dark:text-slate-400 text-[10px] mt-1">Coverage Radius: ~${site.uncertaintyRadiusMeters}m</div>
         </div>`,
         { direction: 'top', offset: [0, -16] }
       );
@@ -409,9 +414,9 @@ export const MapView: React.FC<MapViewProps> = ({
       coverageCircle.addTo(siteLayer);
       towerMarker.addTo(siteLayer);
     });
-  }, [estimatedSites, overlays.cellSites]);
+  }, [estimatedSites, overlays.cellSites, isDarkBasemap]);
 
-  // Update Measurement Points Layer (Filtered by selectedCellId and colored by activeMetric)
+  // Update Measurement Points Layer
   useEffect(() => {
     const pointsLayer = pointsLayerRef.current;
     if (!pointsLayer) return;
@@ -430,7 +435,6 @@ export const MapView: React.FC<MapViewProps> = ({
       const color = getMarkerColor(point, activeMetric);
       const isHo = point.handover_trigger === 1;
 
-      // Draw point circle
       const marker = L.circleMarker([lat, lon], {
         radius: isHo ? 7 : 5,
         fillColor: color,
@@ -440,7 +444,6 @@ export const MapView: React.FC<MapViewProps> = ({
         fillOpacity: 0.85,
       });
 
-      // Tooltip content
       const valStr =
         activeMetric === 'rsrp'
           ? `${point.rsrp_dbm ?? 'N/A'} dBm`
@@ -470,7 +473,6 @@ export const MapView: React.FC<MapViewProps> = ({
 
       marker.addTo(pointsLayer);
 
-      // Optional Timing Advance Range Circle
       if (overlays.taUncertainty && point.timing_advance !== null && point.timing_advance !== undefined) {
         const radiusMeters = timingAdvanceToMeters(point.timing_advance);
         if (radiusMeters && radiusMeters > 0) {
@@ -495,7 +497,6 @@ export const MapView: React.FC<MapViewProps> = ({
     mapInstanceRef.current.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], maxZoom: 16 });
   }, [validGpsPoints]);
 
-  // Center on initial GPS points
   const hasGpsPoints = validGpsPoints.length > 0;
   useEffect(() => {
     if (mapInstanceRef.current && hasGpsPoints) {
@@ -505,18 +506,18 @@ export const MapView: React.FC<MapViewProps> = ({
 
   if (!summary?.has_gps && measurements.length > 0) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center max-w-xl mx-auto my-12">
-        <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center max-w-xl mx-auto my-12 shadow-sm transition-colors duration-150">
+        <div className="w-12 h-12 bg-amber-500/10 text-amber-500 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
           <AlertCircle className="w-6 h-6" />
         </div>
-        <h3 className="text-lg font-bold text-white mb-2">No GPS Coordinates in Loaded Dataset</h3>
-        <p className="text-sm text-slate-400 mb-6">
-          The current dataset (<span className="text-cyan-400 font-mono">{summary?.filename}</span>) contains radio and
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No GPS Coordinates in Loaded Dataset</h3>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+          The current dataset (<span className="text-cyan-600 dark:text-cyan-400 font-mono">{summary?.filename}</span>) contains radio and
           handover event logs without geographic latitude/longitude fields.
         </p>
-        <div className="bg-slate-800/80 rounded-lg p-4 text-xs text-left text-slate-300 space-y-2 mb-6 border border-slate-700">
-          <p className="font-semibold text-slate-200">Recommended Actions:</p>
-          <ul className="list-disc list-inside space-y-1 text-slate-400">
+        <div className="bg-slate-50 dark:bg-slate-800/80 rounded-lg p-4 text-xs text-left text-slate-700 dark:text-slate-300 space-y-2 mb-6 border border-slate-200 dark:border-slate-700">
+          <p className="font-semibold text-slate-900 dark:text-slate-200">Recommended Actions:</p>
+          <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
             <li>Inspect RF KPIs, distributions, and histograms in the <strong>RF Analytics</strong> tab.</li>
             <li>Switch to <strong>Dhaka Urban LTE Route 3</strong> in the <strong>Import / Presets</strong> tab to view complete GPS route mapping.</li>
           </ul>
@@ -527,17 +528,17 @@ export const MapView: React.FC<MapViewProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col h-[calc(100vh-140px)] min-h-[550px] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 ${
-        isDarkBasemap ? 'cellscope-dark-tiles' : ''
+      className={`relative flex flex-col h-[calc(100vh-140px)] min-h-[550px] w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm transition-colors duration-150 ${
+        isDarkBasemap ? 'cellscope-dark-tiles' : 'cellscope-light-tiles'
       }`}
     >
       {/* Top Map Controls Bar */}
       <div className="absolute top-3 left-3 right-3 z-[1000] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         {/* Metric Switcher */}
         <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-          <div className="flex items-center bg-slate-900/95 backdrop-blur-md p-1 rounded-lg border border-slate-700 shadow-xl text-xs font-medium">
-            <span className="px-2 text-slate-400 flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5 text-cyan-400" /> Metric:
+          <div className="flex items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xl text-xs font-medium">
+            <span className="px-2 text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" /> Metric:
             </span>
             {[
               { id: 'rsrp', label: 'RSRP (dBm)' },
@@ -553,7 +554,7 @@ export const MapView: React.FC<MapViewProps> = ({
                 className={`px-2.5 py-1.5 rounded-md uppercase font-semibold text-[11px] transition-all ${
                   activeMetric === m.id
                     ? 'bg-cyan-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 {m.label}
@@ -562,12 +563,14 @@ export const MapView: React.FC<MapViewProps> = ({
           </div>
 
           {/* Layer Visibility Toggles Menu */}
-          <div className="flex items-center gap-1 bg-slate-900/95 backdrop-blur-md p-1 rounded-lg border border-slate-700 shadow-xl text-xs">
+          <div className="flex items-center gap-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xl text-xs">
             <button
               onClick={() => setOverlays((prev) => ({ ...prev, routeTrack: !prev.routeTrack }))}
               title="Toggle Route Track Polyline"
               className={`px-2 py-1 rounded flex items-center gap-1 transition-colors text-[11px] ${
-                overlays.routeTrack ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' : 'text-slate-400 hover:text-white'
+                overlays.routeTrack
+                  ? 'bg-cyan-100 text-cyan-800 border border-cyan-300 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-800'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Route className="w-3 h-3" />
@@ -578,10 +581,12 @@ export const MapView: React.FC<MapViewProps> = ({
               onClick={() => setOverlays((prev) => ({ ...prev, weakZones: !prev.weakZones }))}
               title="Toggle Weak Coverage Zones"
               className={`px-2 py-1 rounded flex items-center gap-1 transition-colors text-[11px] ${
-                overlays.weakZones ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'text-slate-400 hover:text-white'
+                overlays.weakZones
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <TrendingDown className="w-3 h-3 text-amber-400" />
+              <TrendingDown className="w-3 h-3 text-amber-500 dark:text-amber-400" />
               <span>Weak Zones</span>
             </button>
 
@@ -589,10 +594,12 @@ export const MapView: React.FC<MapViewProps> = ({
               onClick={() => setOverlays((prev) => ({ ...prev, handovers: !prev.handovers }))}
               title="Toggle Handover Transition Badges"
               className={`px-2 py-1 rounded flex items-center gap-1 transition-colors text-[11px] ${
-                overlays.handovers ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'text-slate-400 hover:text-white'
+                overlays.handovers
+                  ? 'bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Zap className="w-3 h-3 text-rose-400" />
+              <Zap className="w-3 h-3 text-rose-500 dark:text-rose-400" />
               <span>Handovers</span>
             </button>
 
@@ -600,10 +607,12 @@ export const MapView: React.FC<MapViewProps> = ({
               onClick={() => setOverlays((prev) => ({ ...prev, cellSites: !prev.cellSites }))}
               title="Toggle Estimated Cell Towers"
               className={`px-2 py-1 rounded flex items-center gap-1 transition-colors text-[11px] ${
-                overlays.cellSites ? 'bg-sky-950 text-sky-300 border border-sky-800' : 'text-slate-400 hover:text-white'
+                overlays.cellSites
+                  ? 'bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Radio className="w-3 h-3 text-sky-400" />
+              <Radio className="w-3 h-3 text-sky-500 dark:text-sky-400" />
               <span>Cell Sites</span>
             </button>
           </div>
@@ -615,7 +624,7 @@ export const MapView: React.FC<MapViewProps> = ({
           <select
             value={selectedCellId ?? ''}
             onChange={(e) => setSelectedCellId(e.target.value ? Number(e.target.value) : null)}
-            className="bg-slate-900/95 backdrop-blur-md text-xs font-medium text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-500 shadow-xl font-mono"
+            className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-500 shadow-xl font-mono"
           >
             <option value="">All Serving PCIs ({uniqueCells.length})</option>
             {uniqueCells.map((cid) => (
@@ -633,13 +642,13 @@ export const MapView: React.FC<MapViewProps> = ({
               className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 shadow-xl transition-all ${
                 activeFilterCount > 0
                   ? 'bg-cyan-600 border-cyan-400 text-white font-bold'
-                  : 'bg-slate-900/95 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800'
+                  : 'bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
               <span>Filters</span>
               {activeFilterCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-white text-cyan-900 text-[10px] font-bold flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-cyan-700 text-white text-[10px] font-bold flex items-center justify-center">
                   {activeFilterCount}
                 </span>
               )}
@@ -648,34 +657,34 @@ export const MapView: React.FC<MapViewProps> = ({
 
           {/* Basemap Dark/Light Theme Switcher */}
           <button
-            onClick={() => setIsDarkBasemap(!isDarkBasemap)}
+            onClick={() => setBasemapOverride(!isDarkBasemap)}
             title={isDarkBasemap ? 'Switch to Standard OpenStreetMap' : 'Switch to Dark Basemap'}
-            className="p-2 bg-slate-900/95 backdrop-blur-md text-slate-300 hover:text-white border border-slate-700 rounded-lg shadow-xl hover:bg-slate-800 transition-colors"
+            className="p-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            {isDarkBasemap ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-cyan-400" />}
+            {isDarkBasemap ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-700" />}
           </button>
 
           {/* Reset / Fit Bounds */}
           <button
             onClick={handleFitBounds}
             title="Auto-fit route bounds"
-            className="p-2 bg-slate-900/95 backdrop-blur-md text-slate-300 hover:text-white border border-slate-700 rounded-lg shadow-xl hover:bg-slate-800 transition-colors"
+            className="p-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            <Navigation className="w-4 h-4 text-cyan-400" />
+            <Navigation className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
           </button>
         </div>
       </div>
 
       {/* Tile Loading Error Notice */}
       {tileError && (
-        <div className="absolute top-16 left-3 right-3 z-[1000] bg-amber-950/90 backdrop-blur-md border border-amber-700 text-amber-300 text-xs px-3 py-2 rounded-lg flex items-center justify-between shadow-xl">
+        <div className="absolute top-16 left-3 right-3 z-[1000] bg-amber-50 dark:bg-amber-950/90 backdrop-blur-md border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs px-3 py-2 rounded-lg flex items-center justify-between shadow-xl">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
             <span>Map tile service delayed or unavailable. LTE measurement points remain fully interactive.</span>
           </div>
           <button
             onClick={() => setTileError(false)}
-            className="text-amber-400 hover:text-white font-bold ml-2 text-xs"
+            className="text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-white font-bold ml-2 text-xs"
           >
             ✕
           </button>
@@ -686,10 +695,10 @@ export const MapView: React.FC<MapViewProps> = ({
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
       {/* Multi-Layer Map Legend (Bottom Left) */}
-      <div className="absolute bottom-4 left-4 z-[1000] bg-slate-900/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-700 shadow-2xl text-xs max-w-xs">
-        <div className="font-semibold text-slate-200 mb-2 flex items-center justify-between">
-          <span className="uppercase text-[11px] font-bold text-cyan-400">{activeMetric} Scale</span>
-          <span className="text-[10px] text-slate-400 font-mono">3GPP TS 36.133</span>
+      <div className="absolute bottom-4 left-4 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl text-xs max-w-xs text-slate-800 dark:text-slate-200 transition-colors duration-150">
+        <div className="font-semibold text-slate-900 dark:text-slate-200 mb-2 flex items-center justify-between">
+          <span className="uppercase text-[11px] font-bold text-cyan-700 dark:text-cyan-400">{activeMetric} Scale</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">3GPP TS 36.133</span>
         </div>
 
         {activeMetric === 'rsrp' && (
@@ -697,30 +706,30 @@ export const MapView: React.FC<MapViewProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#10b981]" />
-                <span className="text-slate-300">Excellent</span>
+                <span className="text-slate-700 dark:text-slate-300">Excellent</span>
               </div>
-              <span className="text-slate-400 font-mono">≥ -80 dBm</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">≥ -80 dBm</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#84cc16]" />
-                <span className="text-slate-300">Good</span>
+                <span className="text-slate-700 dark:text-slate-300">Good</span>
               </div>
-              <span className="text-slate-400 font-mono">-80 to -90</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">-80 to -90</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#f59e0b]" />
-                <span className="text-slate-300">Fair</span>
+                <span className="text-slate-700 dark:text-slate-300">Fair</span>
               </div>
-              <span className="text-slate-400 font-mono">-90 to -100</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">-90 to -100</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#ef4444]" />
-                <span className="text-slate-300">Poor (Edge)</span>
+                <span className="text-slate-700 dark:text-slate-300">Poor (Edge)</span>
               </div>
-              <span className="text-slate-400 font-mono">&lt; -100 dBm</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">&lt; -100 dBm</span>
             </div>
           </div>
         )}
@@ -730,30 +739,30 @@ export const MapView: React.FC<MapViewProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#10b981]" />
-                <span className="text-slate-300">Excellent</span>
+                <span className="text-slate-700 dark:text-slate-300">Excellent</span>
               </div>
-              <span className="text-slate-400 font-mono">≥ -10 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">≥ -10 dB</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#84cc16]" />
-                <span className="text-slate-300">Good</span>
+                <span className="text-slate-700 dark:text-slate-300">Good</span>
               </div>
-              <span className="text-slate-400 font-mono">-10 to -14 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">-10 to -14 dB</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#f59e0b]" />
-                <span className="text-slate-300">Fair</span>
+                <span className="text-slate-700 dark:text-slate-300">Fair</span>
               </div>
-              <span className="text-slate-400 font-mono">-14 to -17 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">-14 to -17 dB</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#ef4444]" />
-                <span className="text-slate-300">Poor (Interference)</span>
+                <span className="text-slate-700 dark:text-slate-300">Poor (Interference)</span>
               </div>
-              <span className="text-slate-400 font-mono">&lt; -17 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">&lt; -17 dB</span>
             </div>
           </div>
         )}
@@ -763,30 +772,30 @@ export const MapView: React.FC<MapViewProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#10b981]" />
-                <span className="text-slate-300">Excellent</span>
+                <span className="text-slate-700 dark:text-slate-300">Excellent</span>
               </div>
-              <span className="text-slate-400 font-mono">≥ 20 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">≥ 20 dB</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#84cc16]" />
-                <span className="text-slate-300">Good</span>
+                <span className="text-slate-700 dark:text-slate-300">Good</span>
               </div>
-              <span className="text-slate-400 font-mono">13 to 20 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">13 to 20 dB</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#f59e0b]" />
-                <span className="text-slate-300">Fair</span>
+                <span className="text-slate-700 dark:text-slate-300">Fair</span>
               </div>
-              <span className="text-slate-400 font-mono">0 to 13 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">0 to 13 dB</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#ef4444]" />
-                <span className="text-slate-300">Poor / Noise</span>
+                <span className="text-slate-700 dark:text-slate-300">Poor / Noise</span>
               </div>
-              <span className="text-slate-400 font-mono">&lt; 0 dB</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">&lt; 0 dB</span>
             </div>
           </div>
         )}
@@ -796,31 +805,31 @@ export const MapView: React.FC<MapViewProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#06b6d4]" />
-                <span className="text-slate-300">CRS Shift v=0</span>
+                <span className="text-slate-700 dark:text-slate-300">CRS Shift v=0</span>
               </div>
-              <span className="text-slate-400 font-mono">PCI mod 3 = 0</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">PCI mod 3 = 0</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#a855f7]" />
-                <span className="text-slate-300">CRS Shift v=1</span>
+                <span className="text-slate-700 dark:text-slate-300">CRS Shift v=1</span>
               </div>
-              <span className="text-slate-400 font-mono">PCI mod 3 = 1</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">PCI mod 3 = 1</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#f97316]" />
-                <span className="text-slate-300">CRS Shift v=2</span>
+                <span className="text-slate-700 dark:text-slate-300">CRS Shift v=2</span>
               </div>
-              <span className="text-slate-400 font-mono">PCI mod 3 = 2</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono">PCI mod 3 = 2</span>
             </div>
           </div>
         )}
 
         {/* Overlay Symbols Legend */}
-        <div className="mt-2.5 pt-2 border-t border-slate-800 space-y-1 text-[11px] text-slate-400">
+        <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-0.5 bg-cyan-400 inline-block" />
+            <span className="w-3 h-0.5 bg-cyan-600 dark:bg-cyan-400 inline-block" />
             <span>Cyan Line: Survey Route Track</span>
           </div>
           <div className="flex items-center gap-2">
@@ -840,94 +849,94 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Point Inspector Modal / Card (Bottom Right) */}
       {selectedPoint && (
-        <div className="absolute bottom-4 right-4 z-[1000] bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-slate-700 shadow-2xl text-xs w-92 max-w-[92vw]">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
+        <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl text-xs w-92 max-w-[92vw] text-slate-800 dark:text-slate-300 transition-colors duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-3">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-white text-sm">Point #{selectedPoint.id}</span>
-              <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800 rounded">
+              <span className="font-bold text-slate-900 dark:text-white text-sm">Point #{selectedPoint.id}</span>
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-cyan-100 text-cyan-800 border border-cyan-300 dark:bg-cyan-950 dark:text-cyan-400 dark:border-cyan-800 rounded">
                 {selectedPoint.network_gen || '4G LTE'}
               </span>
             </div>
             <button
               onClick={() => setSelectedPoint(null)}
-              className="text-slate-400 hover:text-white px-1 font-bold"
+              className="text-slate-400 hover:text-slate-900 dark:hover:text-white px-1 font-bold"
             >
               ✕
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-slate-300 font-mono">
+          <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300 font-mono">
             <div>
-              <span className="text-slate-500 text-[10px] block">TIMESTAMP</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">TIMESTAMP</span>
               <span>{selectedPoint.timestamp_raw}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">SPEED & HEADING</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">SPEED & HEADING</span>
               <span>
                 {selectedPoint.speed_kmh !== null ? `${selectedPoint.speed_kmh} km/h` : '0 km/h'}
                 {selectedPoint.heading_deg !== null && selectedPoint.heading_deg !== undefined ? ` • ${Math.round(selectedPoint.heading_deg)}°` : ''}
               </span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">SERVING PCI</span>
-              <span className="text-cyan-400 font-bold">PCI {selectedPoint.serving_cell_id ?? 'N/A'}</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">SERVING PCI</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">PCI {selectedPoint.serving_cell_id ?? 'N/A'}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">OPERATOR & TAC</span>
-              <span className="text-slate-200">
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">OPERATOR & TAC</span>
+              <span className="text-slate-800 dark:text-slate-200">
                 {selectedPoint.operator || 'Telecom'}
                 {selectedPoint.tac ? ` (TAC ${selectedPoint.tac})` : ''}
               </span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">EARFCN / ARFCN</span>
-              <span className="text-slate-300">{selectedPoint.earfcn ? `CH ${selectedPoint.earfcn}` : 'Standard'}</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">EARFCN / ARFCN</span>
+              <span className="text-slate-700 dark:text-slate-300">{selectedPoint.earfcn ? `CH ${selectedPoint.earfcn}` : 'Standard'}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">NEIGHBOR PCI</span>
-              <span className="text-slate-400">{selectedPoint.neighbor_cell_id ? `PCI ${selectedPoint.neighbor_cell_id}` : 'None'}</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">NEIGHBOR PCI</span>
+              <span className="text-slate-500 dark:text-slate-400">{selectedPoint.neighbor_cell_id ? `PCI ${selectedPoint.neighbor_cell_id}` : 'None'}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">RSRP (POWER)</span>
-              <span className="font-bold text-emerald-400">
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">RSRP (POWER)</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 {selectedPoint.rsrp_dbm !== null ? `${selectedPoint.rsrp_dbm} dBm` : 'N/A'}
               </span>
               <span className="text-slate-500 text-[10px] block">{selectedPoint.rsrp_class}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">RSRQ (QUALITY)</span>
-              <span className="font-bold text-sky-400">
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">RSRQ (QUALITY)</span>
+              <span className="font-bold text-sky-600 dark:text-sky-400">
                 {selectedPoint.rsrq_db !== null ? `${selectedPoint.rsrq_db} dB` : 'N/A'}
               </span>
               <span className="text-slate-500 text-[10px] block">{selectedPoint.rsrq_class}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">CINR / SINR</span>
-              <span className="font-bold text-amber-400">
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">CINR / SINR</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">
                 {selectedPoint.cinr_db !== null ? `${selectedPoint.cinr_db} dB` : 'N/A'}
               </span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">HO TRIGGER</span>
-              <span className={selectedPoint.handover_trigger ? 'text-red-400 font-bold' : 'text-slate-400'}>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">HO TRIGGER</span>
+              <span className={selectedPoint.handover_trigger ? 'text-red-500 dark:text-red-400 font-bold' : 'text-slate-500 dark:text-slate-400'}>
                 {selectedPoint.handover_trigger ? '⚡ YES (Active)' : 'NO (0)'}
               </span>
             </div>
             {selectedPoint.timing_advance !== null && selectedPoint.timing_advance !== undefined && (
               <div>
-                <span className="text-slate-500 text-[10px] block">TIMING ADVANCE</span>
-                <span className="text-sky-300">
+                <span className="text-slate-500 dark:text-slate-500 text-[10px] block">TIMING ADVANCE</span>
+                <span className="text-sky-600 dark:text-sky-300">
                   TA {selectedPoint.timing_advance} ({timingAdvanceToMeters(selectedPoint.timing_advance)}m)
                 </span>
               </div>
             )}
             {selectedPoint.cqi !== null && selectedPoint.cqi !== undefined && (
               <div>
-                <span className="text-slate-500 text-[10px] block">CQI (CHANNEL QUALITY)</span>
-                <span className="text-cyan-300">CQI {selectedPoint.cqi} / 15</span>
+                <span className="text-slate-500 dark:text-slate-500 text-[10px] block">CQI (CHANNEL QUALITY)</span>
+                <span className="text-cyan-600 dark:text-cyan-300">CQI {selectedPoint.cqi} / 15</span>
               </div>
             )}
           </div>
-          <div className="mt-3 pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between">
+          <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 flex justify-between">
             <span>Lat: {selectedPoint.latitude?.toFixed(5)}</span>
             <span>Lon: {selectedPoint.longitude?.toFixed(5)}</span>
             {selectedPoint.accuracy_m && <span>Acc: ±{Math.round(selectedPoint.accuracy_m)}m</span>}
@@ -937,48 +946,48 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Estimated Site Inspector Modal (Bottom Right) */}
       {selectedSite && !selectedPoint && (
-        <div className="absolute bottom-4 right-4 z-[1000] bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-cyan-800/80 shadow-2xl text-xs w-88 max-w-[92vw]">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
+        <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-cyan-400/50 dark:border-cyan-800/80 shadow-2xl text-xs w-88 max-w-[92vw] text-slate-800 dark:text-slate-300 transition-colors duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-3">
             <div className="flex items-center gap-2">
               <span className="text-base">📡</span>
-              <span className="font-bold text-white text-sm">Estimated Tower: PCI {selectedSite.pci}</span>
+              <span className="font-bold text-slate-900 dark:text-white text-sm">Estimated Tower: PCI {selectedSite.pci}</span>
             </div>
             <button
               onClick={() => setSelectedSite(null)}
-              className="text-slate-400 hover:text-white px-1 font-bold"
+              className="text-slate-400 hover:text-slate-900 dark:hover:text-white px-1 font-bold"
             >
               ✕
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-slate-300 font-mono">
+          <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300 font-mono">
             <div>
-              <span className="text-slate-500 text-[10px] block">OBSERVED SAMPLES</span>
-              <span className="font-bold text-white">{selectedSite.sampleCount}</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">OBSERVED SAMPLES</span>
+              <span className="font-bold text-slate-900 dark:text-white">{selectedSite.sampleCount}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">NETWORK GEN</span>
-              <span className="text-cyan-400 font-bold">{selectedSite.networkGen}</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">NETWORK GEN</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">{selectedSite.networkGen}</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">PEAK RSRP</span>
-              <span className="font-bold text-emerald-400">{selectedSite.maxRsrp} dBm</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">PEAK RSRP</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectedSite.maxRsrp} dBm</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">MEAN RSRP</span>
-              <span className="text-amber-300">{selectedSite.meanRsrp} dBm</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">MEAN RSRP</span>
+              <span className="text-amber-600 dark:text-amber-300">{selectedSite.meanRsrp} dBm</span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">CARRIER CHANNEL</span>
-              <span className="text-slate-300">
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">CARRIER CHANNEL</span>
+              <span className="text-slate-700 dark:text-slate-300">
                 {selectedSite.earfcn ? `EARFCN ${selectedSite.earfcn}` : 'Standard'}
               </span>
             </div>
             <div>
-              <span className="text-slate-500 text-[10px] block">UNCERTAINTY RADIUS</span>
-              <span className="text-sky-300">±{selectedSite.uncertaintyRadiusMeters} meters</span>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">UNCERTAINTY RADIUS</span>
+              <span className="text-sky-600 dark:text-sky-300">±{selectedSite.uncertaintyRadiusMeters} meters</span>
             </div>
           </div>
-          <div className="mt-3 pt-2 border-t border-slate-800 text-[10px] text-slate-500">
+          <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500">
             Centroid: {selectedSite.latitude.toFixed(6)}, {selectedSite.longitude.toFixed(6)}
           </div>
         </div>

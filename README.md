@@ -91,6 +91,13 @@
 * **3GPP TS 36.101 Carrier & Band Inventory:** Instant calculation of downlink ($F_{\text{DL}}$) and uplink ($F_{\text{UL}}$) center frequencies from detected EARFCNs, paired with duplex mode (FDD/TDD) and Bangladesh operator allocations.
 * **LTE CRS Modulo-3 Interference Grouping:** Automatic grouping of observed PCIs by $v_{\text{shift}} = \text{PCI} \bmod 3$ with co-channel collision risk warnings.
 
+
+### 8. Global Light & Dark Theme Support (Web Dashboard)
+* **Application-Wide Dual Theme:** Polished theme toggle supporting both dark mode (default for NOC & field drive engineers) and high-contrast light mode (optimized for bright sunlight operations and executive boardroom presentations).
+* **High-Contrast Telecom Light Palette:** Main background (`#F5F7FB`), cards and headers (`#FFFFFF`), primary text (`#0F172A`), secondary text (`#64748B`), borders (`#E2E8F0`), with telecom cyan and blue accents (`#0891B2` / `#0284C7`).
+* **Zero-Flash Client Persistence:** Pre-render inline anti-flash script in `index.html` preventing theme blinking, backed by persistent `localStorage` storage key (`'cellscope-theme'`) and automated fallback to system `prefers-color-scheme`.
+* **Map & Layer Synchronization:** Dynamic Leaflet raster tile filter toggle (`cellscope-dark-tiles` inverted hue-shifted tiles vs. `cellscope-light-tiles` clean natural OpenStreetMap basemap), with synchronized legends, popups, cell site centroid markers, and custom zoom controls.
+* **Full Component Theming:** Seamless support across Map View, RF Analytics & Frequency Bands, Weak Zones & Anomalies, Data Quality Inspector, 3GPP Measurement Table, Executive Report Exporter, and Dataset Presets Ingestion.
 ---
 
 ## Mathematical Formulations

@@ -93,14 +93,14 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
     const poorPct = Math.round((dist.poor / total) * 100);
 
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm transition-colors duration-150">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-slate-200">{title} Quality Distribution</span>
-          <span className="text-xs text-slate-400 font-mono">{total.toLocaleString()} samples</span>
+          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{title} Quality Distribution</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{total.toLocaleString()} samples</span>
         </div>
 
         {/* Multi-segment Progress Bar */}
-        <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex mb-3">
+        <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex mb-3">
           <div
             style={{ width: `${excPct}%` }}
             className="bg-[#10b981] transition-all"
@@ -125,21 +125,21 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
 
         {/* Legend percentages */}
         <div className="grid grid-cols-4 gap-2 text-xs font-mono text-center">
-          <div className="bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded border border-slate-200 dark:border-slate-700/50">
             <span className="text-[#10b981] block font-bold">{excPct}%</span>
-            <span className="text-slate-400 text-[10px]">Excellent</span>
+            <span className="text-slate-600 dark:text-slate-400 text-[10px]">Excellent</span>
           </div>
-          <div className="bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded border border-slate-200 dark:border-slate-700/50">
             <span className="text-[#84cc16] block font-bold">{goodPct}%</span>
-            <span className="text-slate-400 text-[10px]">Good</span>
+            <span className="text-slate-600 dark:text-slate-400 text-[10px]">Good</span>
           </div>
-          <div className="bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded border border-slate-200 dark:border-slate-700/50">
             <span className="text-[#f59e0b] block font-bold">{fairPct}%</span>
-            <span className="text-slate-400 text-[10px]">Fair</span>
+            <span className="text-slate-600 dark:text-slate-400 text-[10px]">Fair</span>
           </div>
-          <div className="bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded border border-slate-200 dark:border-slate-700/50">
             <span className="text-[#ef4444] block font-bold">{poorPct}%</span>
-            <span className="text-slate-400 text-[10px]">Poor</span>
+            <span className="text-slate-600 dark:text-slate-400 text-[10px]">Poor</span>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 transition-colors duration-150">
       {/* Session KPIs Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
         <KpiCard
@@ -240,26 +240,26 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
 
       {/* Network Generation Distribution */}
       {summary.network_gen_distribution && Object.keys(summary.network_gen_distribution).length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm transition-colors duration-150">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" /> Network Generation Distribution
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-cyan-600 dark:text-cyan-400" /> Network Generation Distribution
             </span>
-            <span className="text-xs text-slate-400 font-mono">Multi-RAT Coverage Audit</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Multi-RAT Coverage Audit</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {Object.entries(summary.network_gen_distribution).map(([gen, count]) => {
               const pct = Math.round((count / summary.total_records) * 100);
               const color =
-                gen.includes('5G') ? 'text-purple-400 border-purple-800/60 bg-purple-950/40' :
-                gen.includes('4G') || gen.includes('LTE') ? 'text-sky-400 border-sky-800/60 bg-sky-950/40' :
-                gen.includes('3G') ? 'text-amber-400 border-amber-800/60 bg-amber-950/40' :
-                'text-rose-400 border-rose-800/60 bg-rose-950/40';
+                gen.includes('5G') ? 'text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800/60 bg-purple-50 dark:bg-purple-950/40' :
+                gen.includes('4G') || gen.includes('LTE') ? 'text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800/60 bg-sky-50 dark:bg-sky-950/40' :
+                gen.includes('3G') ? 'text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40' :
+                'text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/40';
               return (
                 <div key={gen} className={`p-3 rounded-lg border ${color}`}>
                   <div className="text-xs font-semibold">{gen}</div>
-                  <div className="text-xl font-bold font-mono mt-1">{count} <span className="text-xs text-slate-400 font-normal">({pct}%)</span></div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div className="text-xl font-bold font-mono mt-1 text-slate-900 dark:text-white">{count} <span className="text-xs text-slate-500 font-normal">({pct}%)</span></div>
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
                     <div className="h-full bg-current" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -270,26 +270,26 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
       )}
 
       {/* Band & Carrier Inventory Table (3GPP TS 36.101 Standards-Based) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-cyan-400" />
-            <h4 className="font-semibold text-sm text-slate-200">
+            <Cpu className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">
               RF Carrier & Band Inventory (3GPP TS 36.101 / TS 38.101)
             </h4>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
             {carrierInventory.length > 0 ? `${carrierInventory.length} Detected Carrier Frequencies` : 'Single Carrier'}
           </span>
         </div>
 
         {carrierInventory.length === 0 ? (
-          <p className="text-xs text-slate-400 py-2">No carrier channel (EARFCN/ARFCN) recorded in loaded dataset.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 py-2">No carrier channel (EARFCN/ARFCN) recorded in loaded dataset.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-mono">
                   <th className="pb-2">Channel (EARFCN)</th>
                   <th className="pb-2">3GPP Band</th>
                   <th className="pb-2">Duplex Mode</th>
@@ -300,33 +300,35 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
                   <th className="pb-2">Mean RSRP</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300 font-mono">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-slate-800 dark:text-slate-300 font-mono">
                 {carrierInventory.map((item) => (
-                  <tr key={item.earfcn} className="hover:bg-slate-800/40">
-                    <td className="py-2.5 font-bold text-cyan-400">CH {item.earfcn}</td>
+                  <tr key={item.earfcn} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className="py-2.5 font-bold text-cyan-700 dark:text-cyan-400">CH {item.earfcn}</td>
                     <td className="py-2.5">
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-sky-950 text-sky-400 border border-sky-800/60 font-semibold">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950 dark:text-sky-400 dark:border-sky-800/60 font-semibold">
                         Band {item.bandNumber} ({item.designation})
                       </span>
                     </td>
                     <td className="py-2.5">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        item.duplexMode === 'TDD' ? 'bg-amber-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                        item.duplexMode === 'TDD'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                       }`}>
                         {item.duplexMode}
                       </span>
                     </td>
-                    <td className="py-2.5 font-bold text-white">
+                    <td className="py-2.5 font-bold text-slate-900 dark:text-white">
                       {item.dlFrequencyMhz !== null ? `${item.dlFrequencyMhz} MHz` : '—'}
                     </td>
-                    <td className="py-2.5 text-slate-400">
+                    <td className="py-2.5 text-slate-500 dark:text-slate-400">
                       {item.ulFrequencyMhz !== null ? `${item.ulFrequencyMhz} MHz` : '—'}
                     </td>
-                    <td className="py-2.5 text-slate-300">{item.uniquePcisCount} PCIs</td>
-                    <td className="py-2.5 font-semibold text-white">
+                    <td className="py-2.5 text-slate-700 dark:text-slate-300">{item.uniquePcisCount} PCIs</td>
+                    <td className="py-2.5 font-semibold text-slate-900 dark:text-white">
                       {item.sampleCount} <span className="text-slate-500 font-normal">({item.samplePct}%)</span>
                     </td>
-                    <td className="py-2.5 font-bold text-emerald-400">
+                    <td className="py-2.5 font-bold text-emerald-600 dark:text-emerald-400">
                       {item.meanRsrp !== null ? `${item.meanRsrp} dBm` : '—'}
                     </td>
                   </tr>
@@ -338,55 +340,55 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
       </div>
 
       {/* PCI Reuse & CRS Modulo-3 Shift Collision Analysis */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-cyan-400" />
-            <h4 className="font-semibold text-sm text-slate-200">
+            <Radio className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">
               PCI Reuse & LTE CRS Modulo-3 Shift Grouping (v_shift = PCI mod 3)
             </h4>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
             {pciCollisions.length > 0 ? (
-              <span className="text-amber-400 font-bold">{pciCollisions.length} Shift Collisions</span>
+              <span className="text-amber-600 dark:text-amber-400 font-bold">{pciCollisions.length} Shift Collisions</span>
             ) : (
-              <span className="text-emerald-400">Clean Shift Orthogonality</span>
+              <span className="text-emerald-600 dark:text-emerald-400">Clean Shift Orthogonality</span>
             )}
           </span>
         </div>
 
-        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+        <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
           In 3GPP LTE, the Cell-specific Reference Signal (CRS) frequency position shifts according to{' '}
-          <code className="text-cyan-400 font-mono font-semibold">v_shift = PCI mod 3</code>. When co-channel neighbor cells share the same
+          <code className="text-cyan-700 dark:text-cyan-400 font-mono font-semibold">v_shift = PCI mod 3</code>. When co-channel neighbor cells share the same
           shift, CRS subcarriers directly overlap, generating pilot interference that degrades SINR and CQI.
         </p>
 
         {pciCollisions.length === 0 ? (
-          <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-lg p-3 text-xs text-emerald-400 flex items-center gap-2">
+          <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-lg p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             <span>No CRS modulo-3 collisions detected across observed carrier frequencies.</span>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pciCollisions.map((col, idx) => (
-              <div key={idx} className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg text-xs space-y-2">
+              <div key={idx} className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-lg text-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
                       v_shift = {col.vShift}
                     </span>
-                    <span className="font-mono text-slate-300">
+                    <span className="font-mono text-slate-700 dark:text-slate-300">
                       {col.earfcn > 0 ? `EARFCN ${col.earfcn}` : 'Default Carrier'}
                     </span>
                   </div>
-                  <span className="text-[10px] text-rose-400 font-mono font-bold">CRS Collision Risk</span>
+                  <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono font-bold">CRS Collision Risk</span>
                 </div>
-                <div className="space-y-1 font-mono text-[11px] text-slate-300 pt-1">
+                <div className="space-y-1 font-mono text-[11px] text-slate-700 dark:text-slate-300 pt-1">
                   {col.cells.map((c) => (
-                    <div key={c.pci} className="flex items-center justify-between border-t border-slate-800/60 pt-1">
-                      <span className="text-cyan-400 font-bold">PCI {c.pci}</span>
-                      <span className="text-slate-400">{c.sampleCount} samples</span>
-                      <span className="text-emerald-400">{c.meanRsrp !== null ? `${c.meanRsrp} dBm` : '—'}</span>
+                    <div key={c.pci} className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800/60 pt-1">
+                      <span className="text-cyan-700 dark:text-cyan-400 font-bold">PCI {c.pci}</span>
+                      <span className="text-slate-500 dark:text-slate-400">{c.sampleCount} samples</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">{c.meanRsrp !== null ? `${c.meanRsrp} dBm` : '—'}</span>
                     </div>
                   ))}
                 </div>
@@ -397,37 +399,37 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
       </div>
 
       {/* Serving vs Neighbor Cell Comparison Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-150">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-cyan-400" />
-            <h4 className="font-semibold text-sm text-slate-200">Serving vs. Neighbor Cell Intelligence</h4>
+            <BarChart2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">Serving vs. Neighbor Cell Intelligence</h4>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
             {neighborComparison.uniqueNeighbors} Monitored Neighbor PCIs
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg">
-            <span className="text-slate-400 block mb-1">Neighbor Samples Logged</span>
-            <div className="text-xl font-bold font-mono text-cyan-400">
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-lg">
+            <span className="text-slate-500 dark:text-slate-400 block mb-1">Neighbor Samples Logged</span>
+            <div className="text-xl font-bold font-mono text-cyan-700 dark:text-cyan-400">
               {neighborComparison.count.toLocaleString()}
             </div>
             <span className="text-[10px] text-slate-500">{neighborComparison.samplePct}% of survey points</span>
           </div>
 
-          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg">
-            <span className="text-slate-400 block mb-1">Handover Trigger Rate</span>
-            <div className="text-xl font-bold font-mono text-rose-400">
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-lg">
+            <span className="text-slate-500 dark:text-slate-400 block mb-1">Handover Trigger Rate</span>
+            <div className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400">
               {summary.handover_trigger_rate_pct}%
             </div>
             <span className="text-[10px] text-slate-500">{summary.handover_trigger_count} total handovers</span>
           </div>
 
-          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg">
-            <span className="text-slate-400 block mb-1">Handover Hysteresis Evaluation</span>
-            <div className="text-xl font-bold font-mono text-emerald-400">
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-lg">
+            <span className="text-slate-500 dark:text-slate-400 block mb-1">Handover Hysteresis Evaluation</span>
+            <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
               {summary.handover_trigger_rate_pct < 10 ? 'Optimal (Stable)' : 'High Ping-Pong Risk'}
             </div>
             <span className="text-[10px] text-slate-500">
@@ -446,20 +448,20 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
 
       {/* Per-Cell Statistics Table */}
       {summary.per_cell_stats && summary.per_cell_stats.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-150">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Radio className="w-4 h-4 text-cyan-400" />
-              <h4 className="font-semibold text-sm text-slate-200">
+              <Radio className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">
                 Per-Cell Radio Performance Statistics ({summary.per_cell_stats.length} Serving PCIs)
               </h4>
             </div>
-            <span className="text-xs text-slate-400 font-mono">Sorted by Sample Volume</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Sorted by Sample Volume</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-mono">
                   <th className="pb-2">Serving PCI</th>
                   <th className="pb-2">CRS Shift</th>
                   <th className="pb-2">Generation</th>
@@ -473,32 +475,32 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
                   <th className="pb-2">HO Events</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300 font-mono">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-slate-800 dark:text-slate-300 font-mono">
                 {summary.per_cell_stats.map((cell) => {
                   const shift = getPciMod3Shift(cell.pci);
                   return (
-                    <tr key={cell.pci} className="hover:bg-slate-800/40">
-                      <td className="py-2.5 font-bold text-cyan-400">PCI {cell.pci}</td>
-                      <td className="py-2.5 text-slate-400">v_shift = {shift}</td>
+                    <tr key={cell.pci} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <td className="py-2.5 font-bold text-cyan-700 dark:text-cyan-400">PCI {cell.pci}</td>
+                      <td className="py-2.5 text-slate-500 dark:text-slate-400">v_shift = {shift}</td>
                       <td className="py-2.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] bg-sky-950 text-sky-400 border border-sky-800/60">
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950 dark:text-sky-400 dark:border-sky-800/60">
                           {cell.network_gen}
                         </span>
                       </td>
-                      <td className="py-2.5 text-slate-400">{cell.earfcn ? `EARFCN ${cell.earfcn}` : 'Standard'}</td>
-                      <td className="py-2.5 text-slate-400">{cell.tac ?? 'N/A'}</td>
-                      <td className="py-2.5 font-semibold text-white">
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{cell.earfcn ? `EARFCN ${cell.earfcn}` : 'Standard'}</td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{cell.tac ?? 'N/A'}</td>
+                      <td className="py-2.5 font-semibold text-slate-900 dark:text-white">
                         {cell.sample_count} <span className="text-slate-500 font-normal">({cell.sample_pct}%)</span>
                       </td>
-                      <td className="py-2.5 font-bold text-emerald-400">{cell.mean_rsrp_dbm ?? 'N/A'} dBm</td>
-                      <td className="py-2.5 text-slate-400">{cell.min_rsrp_dbm ?? 'N/A'} dBm</td>
-                      <td className="py-2.5 text-sky-300">{cell.mean_rsrq_db ?? 'N/A'} dB</td>
-                      <td className="py-2.5 text-amber-300">{cell.mean_cinr_db ?? 'N/A'} dB</td>
+                      <td className="py-2.5 font-bold text-emerald-600 dark:text-emerald-400">{cell.mean_rsrp_dbm ?? 'N/A'} dBm</td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">{cell.min_rsrp_dbm ?? 'N/A'} dBm</td>
+                      <td className="py-2.5 text-sky-700 dark:text-sky-300">{cell.mean_rsrq_db ?? 'N/A'} dB</td>
+                      <td className="py-2.5 text-amber-700 dark:text-amber-300">{cell.mean_cinr_db ?? 'N/A'} dB</td>
                       <td className="py-2.5">
                         {cell.handover_count > 0 ? (
-                          <span className="text-rose-400 font-bold">⚡ {cell.handover_count}</span>
+                          <span className="text-rose-600 dark:text-rose-400 font-bold">⚡ {cell.handover_count}</span>
                         ) : (
-                          <span className="text-slate-500">0</span>
+                          <span className="text-slate-400 dark:text-slate-500">0</span>
                         )}
                       </td>
                     </tr>
@@ -512,12 +514,12 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
 
       {/* Warnings & Data Integrity */}
       {summary.warnings.length > 0 && (
-        <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2 text-amber-400 font-semibold text-sm">
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 rounded-xl p-4 transition-colors duration-150">
+          <div className="flex items-center gap-2 mb-2 text-amber-700 dark:text-amber-400 font-semibold text-sm">
             <AlertTriangle className="w-4 h-4" />
             <span>Data Ingestion & Integrity Notices ({summary.warnings.length})</span>
           </div>
-          <ul className="list-disc list-inside space-y-1 text-xs text-amber-300/80 font-mono">
+          <ul className="list-disc list-inside space-y-1 text-xs text-amber-800 dark:text-amber-300/80 font-mono">
             {summary.warnings.map((w, idx) => (
               <li key={idx}>{w}</li>
             ))}
@@ -526,32 +528,32 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
       )}
 
       {/* Schema Mapping Inspector */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-150">
         <div className="flex items-center gap-2 mb-4">
-          <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
-          <h4 className="font-semibold text-sm text-slate-200">Schema Auto-Detection & Column Mapping</h4>
+          <FileSpreadsheet className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+          <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">Schema Auto-Detection & Column Mapping</h4>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-mono">
                 <th className="pb-2 font-medium">Canonical Field</th>
                 <th className="pb-2 font-medium">Detected CSV Column</th>
                 <th className="pb-2 font-medium">Status</th>
                 <th className="pb-2 font-medium">Measurement Standard</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800 text-slate-300 font-mono">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-300 font-mono">
               {Object.entries(summary.detected_schema).map(([canon, raw]) => (
-                <tr key={canon} className="hover:bg-slate-800/40">
-                  <td className="py-2 text-cyan-400 font-bold">{canon}</td>
-                  <td className="py-2 text-slate-300">"{raw}"</td>
+                <tr key={canon} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  <td className="py-2 text-cyan-700 dark:text-cyan-400 font-bold">{canon}</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">"{raw}"</td>
                   <td className="py-2">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
+                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-800 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800/50">
                       <CheckCircle2 className="w-3 h-3" /> Mapped
                     </span>
                   </td>
-                  <td className="py-2 text-slate-400 text-[11px]">
+                  <td className="py-2 text-slate-500 dark:text-slate-400 text-[11px]">
                     {canon === 'rsrp'
                       ? '3GPP TS 36.133 (IE -> dBm)'
                       : canon === 'rsrq'
