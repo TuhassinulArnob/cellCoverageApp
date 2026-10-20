@@ -33,7 +33,7 @@ import com.cellscope.drive.data.entity.ServiceHoleEntity
         CallReliabilityEventEntity::class,
         DirectionalSurveyEntity::class
     ],
-    version = 6,
+    version = 9,
     exportSchema = false
 )
 abstract class CellScopeDatabase : RoomDatabase() {
@@ -249,6 +249,62 @@ abstract class CellScopeDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN servingRat TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN channelNumber INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN channelType TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN primarySignalDbm INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN signalMetricType TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN secondarySignalDb REAL DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE cell_transitions ADD COLUMN fromRat TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE cell_transitions ADD COLUMN toRat TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE cell_transitions ADD COLUMN fromChannel INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE cell_transitions ADD COLUMN toChannel INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE cell_transitions ADD COLUMN fromCellId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE cell_transitions ADD COLUMN toCellId INTEGER DEFAULT NULL")
+
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN servingRat TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN servingPci INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN servingEarfcn INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN rsrpDbm INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN sinrDb REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN jitterMs REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN packetLossPct REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN congestionClassification TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN operator TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN testStatus TEXT NOT NULL DEFAULT 'COMPLETED'")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN skippedReason TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN scheduledTimestampMs INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN endTimestampMs INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN gpsAccuracyM REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN endpointUrl TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN dlBytes INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN dlDurationMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN ulBytes INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN ulDurationMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN probeCount INTEGER NOT NULL DEFAULT 4")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN successfulProbeCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN p95LatencyMs REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN meanLatencyMs REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN rttSamplesJson TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN rsrqDb INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN activeSimOperator TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN simSlotIndex INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE active_qoe_tests ADD COLUMN dataProvenance TEXT NOT NULL DEFAULT 'MEASURED'")
+            }
+        }
+
         fun getDatabase(context: Context): CellScopeDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -256,7 +312,7 @@ abstract class CellScopeDatabase : RoomDatabase() {
                     CellScopeDatabase::class.java,
                     "cellscope_drive.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

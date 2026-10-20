@@ -136,6 +136,13 @@ def process_and_summarize_dataset(
     for idx, row in df.iterrows():
         # Timestamp
         raw_ts = str(row[time_col]).strip() if time_col else f"Row {idx}"
+        if time_col and pd.notna(row[time_col]):
+            try:
+                dt = pd.to_datetime(raw_ts)
+                if pd.notna(dt):
+                    parsed_timestamps.append(dt.timestamp())
+            except Exception:
+                pass
 
         # Coordinates
         lat_val = clean_numeric_value(row[lat_col]) if lat_col else None
@@ -346,8 +353,13 @@ def process_and_summarize_dataset(
     missing_sum = missing_gps_count + missing_rsrp_count + missing_rsrq_count + missing_cinr_count + missing_cell_count
     data_completeness = max(0.0, round((1.0 - (missing_sum / max(1, total_expected_cells))) * 100.0, 1))
 
-    # Duration estimation: 1 sample per second assumed if no valid time delta
-    duration_sec = float(total_records)
+    # Duration calculation: exact delta from valid start and end timestamps (fallback to 1s/sample)
+    if len(parsed_timestamps) >= 2:
+        duration_sec = float(max(parsed_timestamps) - min(parsed_timestamps))
+        if duration_sec <= 0:
+            duration_sec = float(total_records)
+    else:
+        duration_sec = float(total_records)
 
     # Weak coverage segments count (< -105 dBm)
     weak_count = sum(1 for p in points if p.rsrp_dbm is not None and p.rsrp_dbm < -105)

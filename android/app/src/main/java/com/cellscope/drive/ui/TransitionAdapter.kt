@@ -10,7 +10,8 @@ import com.cellscope.drive.databinding.ItemTransitionBinding
 import java.util.Locale
 
 class TransitionAdapter(
-    private var transitions: List<CellTransitionEntity> = emptyList()
+    private var transitions: List<CellTransitionEntity> = emptyList(),
+    var onItemClickListener: ((CellTransitionEntity) -> Unit)? = null
 ) : RecyclerView.Adapter<TransitionAdapter.TransitionViewHolder>() {
 
     fun updateTransitions(newTransitions: List<CellTransitionEntity>) {
@@ -24,7 +25,11 @@ class TransitionAdapter(
     }
 
     override fun onBindViewHolder(holder: TransitionViewHolder, position: Int) {
-        holder.bind(transitions[position])
+        val item = transitions[position]
+        holder.bind(item)
+        holder.itemView.setOnClickListener {
+            onItemClickListener?.invoke(item)
+        }
     }
 
     override fun getItemCount(): Int = transitions.size

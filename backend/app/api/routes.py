@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from pydantic import BaseModel
 
-from backend.app.core.config import DATA_RAW_DIR
+from backend.app.core.config import DATA_RAW_DIR, BASE_DIR
 from backend.app.core.schema import (
     DatasetSummary,
     MeasurementPoint,
@@ -21,6 +21,16 @@ router = APIRouter(prefix="/api", tags=["Drive-Test Analytics"])
 # In-memory store for loaded sessions
 _DATASET_STORE: Dict[str, Dict] = {}
 _CURRENT_DATASET_ID: Optional[str] = None
+
+
+def resolve_preset_path(rel_path: str) -> Optional[Path]:
+    p1 = DATA_RAW_DIR / Path(rel_path)
+    if p1.exists():
+        return p1
+    p2 = BASE_DIR / Path(rel_path)
+    if p2.exists():
+        return p2
+    return None
 
 
 PRESET_CATALOG = [
@@ -59,6 +69,24 @@ PRESET_CATALOG = [
         "rows": 922,
         "has_gps": False,
         "description": "Handover and RF measurement log without GPS coordinates to test tabular KPI analytics when coordinates are unavailable."
+    },
+    {
+        "id": "bd_iu_kushtia",
+        "title": "Suburban Highway Drive Test (Kushtia Sector)",
+        "category": "Field Dataset",
+        "rel_path": "docs/IUtoKushtia.csv",
+        "rows": 2131,
+        "has_gps": True,
+        "description": "Real suburban highway drive test along Kushtia highway corridor (2131 samples, 37 min duration, 23.4 km route)."
+    },
+    {
+        "id": "bd_kushtia_veramara",
+        "title": "Kushtia to Bheramara / Veramara Drive Test",
+        "category": "Field Dataset",
+        "rel_path": "docs/kushtia to veramara .csv",
+        "rows": 2023,
+        "has_gps": True,
+        "description": "Real inter-district highway drive test between Kushtia and Bheramara (2023 samples, 100% GPS, 35 min duration, 21.6 km route)."
     }
 ]
 
@@ -74,11 +102,11 @@ def health_check():
 
 @router.get("/datasets/available", response_model=List[AvailableDatasetInfo])
 def get_available_datasets():
-    """Returns available pre-indexed drive-test datasets from data/raw/."""
+    """Returns available pre-indexed drive-test datasets from data/raw/ and docs/."""
     available = []
     for item in PRESET_CATALOG:
-        full_path = DATA_RAW_DIR / Path(item["rel_path"])
-        if full_path.exists():
+        full_path = resolve_preset_path(item["rel_path"])
+        if full_path and full_path.exists():
             available.append(AvailableDatasetInfo(**item))
     return available
 
@@ -90,9 +118,9 @@ def load_preset_dataset(preset_id: str):
     if not preset:
         raise HTTPException(status_code=404, detail=f"Preset {preset_id} not found.")
 
-    file_path = DATA_RAW_DIR / Path(preset["rel_path"])
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found at {file_path}")
+    file_path = resolve_preset_path(preset["rel_path"])
+    if not file_path or not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found at {preset['rel_path']}")
 
     try:
         df, mapping, unmapped = parse_csv_to_dataframe(file_path=str(file_path))

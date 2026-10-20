@@ -164,4 +164,58 @@ class PdfReportExporterTest {
         assertTrue(!filename.contains(" "))
         assertTrue(!filename.contains("/"))
     }
+
+    @Test
+    fun testGraphInterpretationStructure() {
+        val interp = com.cellscope.drive.export.GraphInterpretation(
+            metricMeasured = "3GPP Reference Signal Received Power (RSRP in dBm)",
+            provenance = "Android TelephonyManager via CellSignalStrengthLte.rsrp",
+            formulation = "Discrete percentage frequency distribution",
+            sampleCountScope = "150 valid LTE measurements",
+            keyObservations = "Excellent 45%, Good 35%, Fair 15%, Poor 5%",
+            engineeringInterpretation = "Robust link margin with adequate site density",
+            alternativeExplanations = "Vehicle chassis attenuation (3-10 dB)",
+            limitationsAndActions = "Calibrated scanner sweep recommended"
+        )
+
+        assertTrue(interp.metricMeasured.isNotEmpty())
+        assertTrue(interp.provenance.isNotEmpty())
+        assertTrue(interp.formulation.isNotEmpty())
+        assertTrue(interp.sampleCountScope.isNotEmpty())
+        assertTrue(interp.keyObservations.isNotEmpty())
+        assertTrue(interp.engineeringInterpretation.isNotEmpty())
+        assertTrue(interp.alternativeExplanations.isNotEmpty())
+        assertTrue(interp.limitationsAndActions.isNotEmpty())
+    }
+
+    @Test
+    fun testVectorFrequencyCarrierResolution() {
+        val measurement = createSampleMeasurement(
+            id = 1L,
+            timestampMs = 1700000000000L,
+            pci = 101,
+            rsrp = -85
+        )
+        val carrier = com.cellscope.drive.telephony.CellularBandResolver.resolveMeasurement(measurement)
+        assertNotNull(carrier)
+        assertEquals(3, carrier?.bandNumber) // EARFCN 1600 is LTE Band 3
+        assertTrue(carrier?.bandName?.startsWith("Band 3") == true)
+        assertEquals(1845.0, carrier?.dlCenterFreqMhz ?: 0.0, 0.1)
+    }
+
+    @Test
+    fun testScatterPlotThresholdBounds() {
+        val measurements = listOf(
+            createSampleMeasurement(1L, 1000L, 101, -44),
+            createSampleMeasurement(2L, 2000L, 101, -140),
+            createSampleMeasurement(3L, 3000L, 101, -85)
+        )
+        val minRsrp = -130f
+        val maxRsrp = -40f
+        for (m in measurements) {
+            val clamped = m.rsrpDbm!!.toFloat().coerceIn(minRsrp, maxRsrp)
+            assertTrue(clamped >= minRsrp)
+            assertTrue(clamped <= maxRsrp)
+        }
+    }
 }

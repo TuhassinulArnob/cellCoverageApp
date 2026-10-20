@@ -69,6 +69,8 @@ object HandoverAnalyzer {
         var lastEarfcn: Int? = null
         var lastRsrp: Int? = null
         var lastTac: Int? = null
+        var lastRat: String? = null
+        var lastCellId: Int? = null
         var lastTimestampMs: Long = 0L
 
         // Track dwell times
@@ -187,7 +189,13 @@ object HandoverAnalyzer {
                             toTac = m.tac,
                             eventType = eventType,
                             confidenceScore = confidence,
-                            details = detail
+                            details = detail,
+                            fromRat = lastRat,
+                            toRat = m.servingRat ?: m.networkType,
+                            fromChannel = lastEarfcn,
+                            toChannel = m.channelNumber ?: m.earfcn,
+                            fromCellId = lastCellId,
+                            toCellId = m.eci
                         )
                     )
 
@@ -198,9 +206,11 @@ object HandoverAnalyzer {
                 }
 
                 lastPci = currentPci
-                lastEarfcn = m.earfcn
+                lastEarfcn = m.channelNumber ?: m.earfcn
                 lastRsrp = m.rsrpDbm
                 lastTac = m.tac
+                lastRat = m.servingRat ?: m.networkType
+                lastCellId = m.eci
                 lastTimestampMs = m.timestampMs
             }
         }

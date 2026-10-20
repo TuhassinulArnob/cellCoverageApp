@@ -37,8 +37,9 @@ object AiAnalysisExporter {
         sb.append("## 1. Survey & Session Context\n\n")
         sb.append("- **Session Name:** ${session.sessionName}\n")
         sb.append("- **Session ID:** #${session.id}\n")
-        sb.append("- **Start Time:** ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(session.startTimeMs))}\n")
-        val durationSec = if (session.endTimeMs != null) (session.endTimeMs!! - session.startTimeMs) / 1000 else 0
+        val durationSec = if (session.endTimeMs != null && session.endTimeMs!! >= session.startTimeMs) {
+            (session.endTimeMs!! - session.startTimeMs) / 1000L
+        } else 0L
         sb.append("- **Duration:** ${String.format(Locale.US, "%02d:%02d:%02d", durationSec / 3600, (durationSec % 3600) / 60, durationSec % 60)}\n")
         sb.append("- **Total Distance:** ${String.format(Locale.US, "%.2f km", session.totalDistanceM / 1000.0)}\n")
         sb.append("- **Recorded Telemetry Samples:** ${session.sampleCount}\n")
@@ -50,7 +51,7 @@ object AiAnalysisExporter {
         sb.append("  - **Critical Severity:** ${report.criticalCount}\n")
         sb.append("  - **Warning Severity:** ${report.warningCount}\n")
         sb.append("  - **Advisory Info:** ${report.infoCount}\n")
-        sb.append("- **ML & Rule Agreement Consensus:** ${String.format(Locale.US, "%.1f%%", report.mlAgreementRatioPct)}\n\n")
+        sb.append("- **ML & Rule Agreement Consensus:** ${String.format(Locale.US, "%.1f%%", report.mlAgreementRatioPct)} (Candidate algorithmic hypothesis, requires physical verification)\n\n")
 
         sb.append("## 3. Detailed Diagnostic Findings & Hypotheses\n\n")
         if (report.anomalies.isEmpty()) {

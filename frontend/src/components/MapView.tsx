@@ -37,22 +37,22 @@ export const MapView: React.FC<MapViewProps> = ({
     if (metric === 'rsrp') {
       const v = point.rsrp_dbm;
       if (v === null) return '#64748b';
-      if (v >= -80) return '#10b981'; // Excellent (Green)
-      if (v >= -90) return '#0ea5e9'; // Good (Cyan)
-      if (v >= -100) return '#f59e0b'; // Fair (Amber)
-      return '#ef4444'; // Poor (Red)
+      if (v >= -80) return '#10b981'; // Excellent (Green, >= -80 dBm)
+      if (v >= -90) return '#84cc16'; // Good (Lime, -90 to -81 dBm)
+      if (v >= -100) return '#f59e0b'; // Fair (Yellow/Amber, -100 to -91 dBm)
+      return '#ef4444'; // Poor (Red, < -100 dBm)
     } else if (metric === 'rsrq') {
       const v = point.rsrq_db;
       if (v === null) return '#64748b';
       if (v >= -10) return '#10b981';
-      if (v >= -14) return '#0ea5e9';
+      if (v >= -14) return '#84cc16';
       if (v >= -17) return '#f59e0b';
       return '#ef4444';
     } else {
       const v = point.cinr_db;
       if (v === null) return '#64748b';
       if (v >= 20) return '#10b981';
-      if (v >= 13) return '#0ea5e9';
+      if (v >= 13) return '#84cc16';
       if (v >= 0) return '#f59e0b';
       return '#ef4444';
     }
@@ -318,7 +318,7 @@ export const MapView: React.FC<MapViewProps> = ({
           </div>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-[#0ea5e9]" />
+              <span className="w-3 h-3 rounded-full bg-[#84cc16]" />
               <span className="text-slate-300">Good</span>
             </div>
             <span className="text-slate-400 font-mono">
@@ -344,9 +344,15 @@ export const MapView: React.FC<MapViewProps> = ({
             </span>
           </div>
         </div>
-        <div className="mt-2 pt-2 border-t border-slate-800 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <span className="w-2.5 h-2.5 rounded-full border-2 border-white bg-red-500 inline-block" />
-          <span>White rim indicates Handover Trigger event</span>
+        <div className="mt-2 pt-2 border-t border-slate-800 space-y-1 text-[11px] text-slate-400">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border border-cyan-400 bg-cyan-400/20 inline-block" />
+            <span>Cyan: Spatial Uncertainty / TA Range (Not RSRP)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border-2 border-white bg-red-500 inline-block" />
+            <span>White rim: Handover Trigger event</span>
+          </div>
         </div>
       </div>
 

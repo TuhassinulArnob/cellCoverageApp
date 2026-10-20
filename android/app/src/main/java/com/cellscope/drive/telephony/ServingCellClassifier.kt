@@ -25,7 +25,13 @@ data class RawCellCandidate(
     val nrArfcn: Int? = null,
     val csiRsrpDbm: Int? = null,
     val csiRsrqDb: Int? = null,
-    val csiSinrDb: Double? = null
+    val csiSinrDb: Double? = null,
+    val servingRat: String? = null,
+    val channelNumber: Int? = null,
+    val channelType: String? = null,
+    val primarySignalDbm: Int? = null,
+    val signalMetricType: String? = null,
+    val secondarySignalDb: Double? = null
 ) {
     companion object {
         const val CONNECTION_NONE = 0
@@ -185,7 +191,13 @@ object ServingCellClassifier {
             nrArfcn = this.nrArfcn,
             csiRsrpDbm = this.csiRsrpDbm,
             csiRsrqDb = this.csiRsrqDb,
-            csiSinrDb = this.csiSinrDb
+            csiSinrDb = this.csiSinrDb,
+            servingRat = this.servingRat,
+            channelNumber = this.channelNumber,
+            channelType = this.channelType,
+            primarySignalDbm = this.primarySignalDbm,
+            signalMetricType = this.signalMetricType,
+            secondarySignalDb = this.secondarySignalDb
         )
     }
 }

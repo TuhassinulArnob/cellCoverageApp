@@ -2,26 +2,63 @@ package com.cellscope.drive.telephony
 
 import java.util.Locale
 
+/**
+ * Unified, timestamped network-state model (P2).
+ * Strictly distinguishes SIM operator, registered network, and serving cell operator.
+ * Prevents stale operator information from persisting after SIM or RAT switching.
+ */
 data class OperatorIdentity(
-    val simOperatorName: String?,
-    val simOperatorNumeric: String?, // MCC+MNC e.g. "47001"
-    val simCountryIso: String?,
-    val networkOperatorName: String?,
-    val networkOperatorNumeric: String?, // MCC+MNC e.g. "47001"
-    val networkCountryIso: String?,
-    val dataNetworkType: String, // "LTE", "5G_NR", etc.
-    val isRoaming: Boolean,
-    val servingPci: Int?,
-    val tac: Int?,
-    val eci: Int?,
-    val earfcn: Int?,
-    val timestampMs: Long
+    val simOperatorName: String? = null,
+    val simOperatorNumeric: String? = null, // MCC+MNC e.g. "47001"
+    val simCountryIso: String? = null,
+    val simSlotIndex: Int? = null,
+    val networkOperatorName: String? = null,
+    val networkOperatorNumeric: String? = null, // MCC+MNC e.g. "47001"
+    val networkCountryIso: String? = null,
+    val servingOperatorAlpha: String? = null,
+    val servingOperatorNumeric: String? = null,
+    val dataNetworkType: String = "UNKNOWN", // "LTE", "5G_NR", "UMTS", "GSM", etc.
+    val isRoaming: Boolean = false,
+    val servingPci: Int? = null,
+    val tac: Int? = null,
+    val eci: Int? = null,
+    val earfcn: Int? = null,
+    val timestampMs: Long = System.currentTimeMillis(),
+    val serviceState: String = "IN_SERVICE", // IN_SERVICE, OUT_OF_SERVICE, EMERGENCY_ONLY, POWER_OFF
+    val dataConnectionState: String = "CONNECTED",
+    val dataSubscriptionId: Int? = null,
+    val isStale: Boolean = false,
+    val activeRat: String = "LTE"
 ) {
     val simResolvedName: String
         get() = BangladeshMccMnc.resolveOperatorName(simOperatorNumeric, simOperatorName)
 
     val networkResolvedName: String
         get() = BangladeshMccMnc.resolveOperatorName(networkOperatorNumeric, networkOperatorName)
+
+    val servingResolvedName: String
+        get() = if (!servingOperatorNumeric.isNullOrBlank() || !servingOperatorAlpha.isNullOrBlank()) {
+            BangladeshMccMnc.resolveOperatorName(servingOperatorNumeric, servingOperatorAlpha)
+        } else {
+            networkResolvedName
+        }
+
+    fun getEffectiveDisplayOperator(): String {
+        return when (serviceState.uppercase(Locale.US)) {
+            "OUT_OF_SERVICE", "POWER_OFF" -> "No Service"
+            "EMERGENCY_ONLY" -> "Emergency Calls Only"
+            else -> {
+                val base = if (servingResolvedName.isNotBlank() && servingResolvedName != "Unknown Operator") {
+                    servingResolvedName
+                } else if (networkResolvedName.isNotBlank() && networkResolvedName != "Unknown Operator") {
+                    networkResolvedName
+                } else {
+                    "Updating..."
+                }
+                if (isStale && base != "Updating...") "$base (Stale)" else base
+            }
+        }
+    }
 
     val roamingStatusText: String
         get() = when {
@@ -38,11 +75,15 @@ data class OperatorIdentity(
         get() = eci?.let { it % 256 }
 
     val ecgi: String?
-        get() = if (networkOperatorNumeric != null && eci != null) {
-            val mcc = networkOperatorNumeric.take(3)
-            val mnc = networkOperatorNumeric.substring(3)
-            "$mcc-$mnc-$eci"
-        } else null
+        get() {
+            val plmn = servingOperatorNumeric ?: networkOperatorNumeric
+            return if (plmn != null && plmn.length >= 5 && eci != null) {
+                val clean = plmn.replace("-", "")
+                val mcc = clean.take(3)
+                val mnc = clean.substring(3)
+                "$mcc-$mnc-$eci"
+            } else null
+        }
 
     val derivedBand: LteBandTable.FrequencyResult?
         get() = LteBandTable.resolveEarfcn(earfcn)
@@ -53,12 +94,14 @@ data class OperatorIdentity(
         } ?: (earfcn?.let { "EARFCN $it" } ?: "Carrier: Unmapped")
 
     fun getFreshnessText(currentTimeMs: Long = System.currentTimeMillis()): String {
+        if (isStale) return "Stale (> 15s since scan)"
         val ageMs = (currentTimeMs - timestampMs).coerceAtLeast(0L)
         val ageSec = ageMs / 1000.0
         return when {
             ageSec < 1.0 -> "Fresh (just now)"
-            ageSec < 60.0 -> String.format(Locale.US, "%.1fs ago", ageSec)
-            else -> String.format(Locale.US, "%dm %ds ago", ageMs / 60000, (ageMs % 60000) / 1000)
+            ageSec < 15.0 -> String.format(Locale.US, "Fresh (%.1fs ago)", ageSec)
+            ageSec < 60.0 -> String.format(Locale.US, "Lagging (%.1fs ago)", ageSec)
+            else -> String.format(Locale.US, "Stale (%dm %ds ago)", ageMs / 60000, (ageMs % 60000) / 1000)
         }
     }
 }
@@ -72,14 +115,15 @@ object BangladeshMccMnc {
         "47002" to "Robi Axiata (Robi)",
         "47003" to "Banglalink (BL)",
         "47004" to "Teletalk Bangladesh (Teletalk)",
-        "47005" to "Citycell (Historical CDMA)"
+        "47005" to "Citycell (Historical CDMA)",
+        "47007" to "Airtel Bangladesh (Merged with Robi)"
     )
 
     fun resolveOperatorName(mccMnc: String?, fallbackAlpha: String?): String {
         if (mccMnc.isNullOrBlank()) {
-            return fallbackAlpha?.takeIf { it.isNotBlank() } ?: "Unknown Operator"
+            return fallbackAlpha?.takeIf { it.isNotBlank() } ?: "Unknown Operator (Unbroadcast PLMN)"
         }
-        val clean = mccMnc.trim()
+        val clean = mccMnc.trim().replace("-", "")
         val mapped = OPERATOR_MAP[clean]
         if (mapped != null) {
             return if (!fallbackAlpha.isNullOrBlank() && !mapped.contains(fallbackAlpha, ignoreCase = true)) {
@@ -98,6 +142,7 @@ object BangladeshMccMnc {
     }
 
     fun isBangladeshMcc(mccMnc: String?): Boolean {
-        return mccMnc?.startsWith(BANGLADESH_MCC) == true
+        val clean = mccMnc?.trim()?.replace("-", "")
+        return clean?.startsWith(BANGLADESH_MCC) == true
     }
 }

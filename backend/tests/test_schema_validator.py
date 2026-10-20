@@ -1,5 +1,6 @@
+import os
 import pytest
-from backend.app.services.parser import detect_column_mapping, clean_numeric_value
+from backend.app.services.parser import detect_column_mapping, clean_numeric_value, parse_csv_to_dataframe
 from backend.app.services.validator import validate_coordinates, validate_rf_ranges
 
 
@@ -65,3 +66,18 @@ def test_validate_coordinates():
     is_valid, err = validate_coordinates(None, 90.0)
     assert is_valid is False
     assert err == "MISSING_COORDINATES"
+
+
+def test_parse_multi_section_extended_csv():
+    fixture_path = os.path.join("docs", "cellscope_extended_Survey_20261020_050657_20261020_050657.csv")
+    assert os.path.exists(fixture_path), f"Fixture missing: {fixture_path}"
+
+    df, mapping, unmapped = parse_csv_to_dataframe(file_path=fixture_path)
+    assert not df.empty
+    # Must correctly map canonical fields
+    assert "timestamp" in mapping
+    assert "latitude" in mapping
+    assert "longitude" in mapping
+    assert "rsrp" in mapping
+    # Must have extracted the telemetry rows without parser failure on subsequent sections
+    assert len(df) >= 10

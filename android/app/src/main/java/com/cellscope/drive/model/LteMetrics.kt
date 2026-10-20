@@ -31,7 +31,13 @@ data class LteMetrics(
     val networkGen: NetworkGeneration = NetworkGeneration.fromString(networkType),
     val serviceState: String = "IN_SERVICE",       // "IN_SERVICE", "OUT_OF_SERVICE", "EMERGENCY_ONLY", "POWER_OFF", "UNKNOWN"
     val dataState: String = "CONNECTED",           // "CONNECTED", "CONNECTING", "DISCONNECTED", "SUSPENDED", "UNKNOWN"
-    val callState: String = "IDLE"                 // "IDLE", "RINGING", "OFFHOOK"
+    val callState: String = "IDLE",                 // "IDLE", "RINGING", "OFFHOOK"
+    val servingRat: String? = null,
+    val channelNumber: Int? = null,
+    val channelType: String? = null,
+    val primarySignalDbm: Int? = null,
+    val signalMetricType: String? = null,
+    val secondarySignalDb: Double? = null
 ) {
     val is5gActive: Boolean
         get() = networkType == "5G_NR" || nrState == "SA" || nrState == "NSA" || networkGen == NetworkGeneration.GEN_5G

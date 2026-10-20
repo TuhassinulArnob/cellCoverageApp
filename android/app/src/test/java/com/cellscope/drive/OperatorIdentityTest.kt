@@ -24,7 +24,7 @@ class OperatorIdentityTest {
 
     @Test
     fun testEnodebAndSectorDerivation() {
-        // ECI 2849102 -> 2849102 / 256 = 11129 (eNodeB ID), 2849102 % 256 = 86 (Sector ID)
+        // ECI 2849102 -> 2849102 / 256 = 11129 (eNodeB ID), 2849102 % 256 = 78 (Sector ID)
         val identity = OperatorIdentity(
             simOperatorName = "Grameenphone",
             simOperatorNumeric = "47001",
@@ -69,5 +69,154 @@ class OperatorIdentityTest {
         )
 
         assertTrue(roamingIdentity.roamingStatusText.contains("Roaming"))
+    }
+
+    @Test
+    fun testOperatorSwitchingRobiToBanglalink() {
+        // Initial state: Robi Axiata
+        val robiIdentity = OperatorIdentity(
+            simOperatorName = "Robi",
+            simOperatorNumeric = "47002",
+            networkOperatorName = "Robi",
+            networkOperatorNumeric = "47002",
+            servingOperatorAlpha = "Robi Axiata (Robi)",
+            servingOperatorNumeric = "47002",
+            dataNetworkType = "LTE",
+            servingPci = 177,
+            earfcn = 1399
+        )
+        assertEquals("Robi Axiata (Robi)", robiIdentity.getEffectiveDisplayOperator())
+        assertEquals("Robi Axiata (Robi)", robiIdentity.servingResolvedName)
+
+        // Switched to Banglalink: SIM and serving cell immediately reflect Banglalink
+        val banglalinkIdentity = robiIdentity.copy(
+            simOperatorName = "Banglalink",
+            simOperatorNumeric = "47003",
+            networkOperatorName = "Banglalink",
+            networkOperatorNumeric = "47003",
+            servingOperatorAlpha = "Banglalink (BL)",
+            servingOperatorNumeric = "47003",
+            servingPci = 312,
+            earfcn = 1750
+        )
+        assertEquals("Banglalink (BL)", banglalinkIdentity.getEffectiveDisplayOperator())
+        assertEquals("Banglalink (BL)", banglalinkIdentity.servingResolvedName)
+        assertNotEquals(robiIdentity.getEffectiveDisplayOperator(), banglalinkIdentity.getEffectiveDisplayOperator())
+    }
+
+    @Test
+    fun testOperatorSwitchingBanglalinkToRobi() {
+        val blIdentity = OperatorIdentity(
+            simOperatorName = "Banglalink",
+            simOperatorNumeric = "47003",
+            servingOperatorAlpha = "Banglalink (BL)",
+            servingOperatorNumeric = "47003"
+        )
+        assertEquals("Banglalink (BL)", blIdentity.getEffectiveDisplayOperator())
+
+        val robiIdentity = blIdentity.copy(
+            simOperatorName = "Robi",
+            simOperatorNumeric = "47002",
+            servingOperatorAlpha = "Robi Axiata (Robi)",
+            servingOperatorNumeric = "47002"
+        )
+        assertEquals("Robi Axiata (Robi)", robiIdentity.getEffectiveDisplayOperator())
+    }
+
+    @Test
+    fun testLteToUmtsTransition() {
+        val lteIdentity = OperatorIdentity(
+            simOperatorNumeric = "47002",
+            networkOperatorNumeric = "47002",
+            dataNetworkType = "LTE",
+            activeRat = "LTE",
+            servingPci = 177,
+            earfcn = 1399
+        )
+        assertEquals("LTE", lteIdentity.activeRat)
+
+        val umtsIdentity = lteIdentity.copy(
+            dataNetworkType = "HSPA+",
+            activeRat = "3G",
+            servingPci = 412, // PSC in 3G
+            earfcn = null
+        )
+        assertEquals("3G", umtsIdentity.activeRat)
+        assertEquals("HSPA+", umtsIdentity.dataNetworkType)
+        assertNull(umtsIdentity.earfcn)
+    }
+
+    @Test
+    fun testLteToGsmTransition() {
+        val gsmIdentity = OperatorIdentity(
+            simOperatorNumeric = "47002",
+            networkOperatorNumeric = "47002",
+            dataNetworkType = "EDGE",
+            activeRat = "2G",
+            servingPci = 54, // BSIC in 2G
+            earfcn = null
+        )
+        assertEquals("2G", gsmIdentity.activeRat)
+        assertEquals("EDGE", gsmIdentity.dataNetworkType)
+    }
+
+    @Test
+    fun testServiceUnavailableStates() {
+        val outOfService = OperatorIdentity(
+            simOperatorNumeric = "47002",
+            serviceState = "OUT_OF_SERVICE"
+        )
+        assertEquals("No Service", outOfService.getEffectiveDisplayOperator())
+
+        val emergencyOnly = OperatorIdentity(
+            simOperatorNumeric = "47002",
+            serviceState = "EMERGENCY_ONLY"
+        )
+        assertEquals("Emergency Calls Only", emergencyOnly.getEffectiveDisplayOperator())
+
+        val powerOff = OperatorIdentity(
+            simOperatorNumeric = "47002",
+            serviceState = "POWER_OFF"
+        )
+        assertEquals("No Service", powerOff.getEffectiveDisplayOperator())
+    }
+
+    @Test
+    fun testStaleCellInformation() {
+        val staleIdentity = OperatorIdentity(
+            networkOperatorNumeric = "47002",
+            isStale = true,
+            timestampMs = System.currentTimeMillis() - 20000L
+        )
+        assertEquals("Robi Axiata (Robi) (Stale)", staleIdentity.getEffectiveDisplayOperator())
+        assertTrue(staleIdentity.getFreshnessText().contains("Stale"))
+    }
+
+    @Test
+    fun testDualSimSubscriptionChanges() {
+        // Device with SIM 1 (Robi) and SIM 2 (Banglalink)
+        // Subscription 1 active for cellular data
+        val sub1Identity = OperatorIdentity(
+            simOperatorName = "Robi",
+            simOperatorNumeric = "47002",
+            networkOperatorNumeric = "47002",
+            dataSubscriptionId = 1,
+            servingOperatorAlpha = "Robi Axiata (Robi)",
+            servingOperatorNumeric = "47002"
+        )
+        assertEquals(1, sub1Identity.dataSubscriptionId)
+        assertEquals("Robi Axiata (Robi)", sub1Identity.getEffectiveDisplayOperator())
+
+        // User switches data SIM to Subscription 2 (Banglalink)
+        val sub2Identity = OperatorIdentity(
+            simOperatorName = "Banglalink",
+            simOperatorNumeric = "47003",
+            networkOperatorNumeric = "47003",
+            dataSubscriptionId = 2,
+            servingOperatorAlpha = "Banglalink (BL)",
+            servingOperatorNumeric = "47003"
+        )
+        assertEquals(2, sub2Identity.dataSubscriptionId)
+        assertEquals("Banglalink (BL)", sub2Identity.getEffectiveDisplayOperator())
     }
 }

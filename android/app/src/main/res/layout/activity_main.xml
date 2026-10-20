@@ -8,7 +8,6 @@
 
     <!-- Main Content Container for 5 Primary Navigation Sections -->
     <FrameLayout
-        android:id="@+id/contentContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginBottom="56dp">
@@ -72,6 +71,13 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
                 </LinearLayout>
+
+                <!-- LIVE SURVEY & TELEMETRY SECTION (HIDDEN OR MARKED INACTIVE WHEN REVIEWING SAVED/IMPORTED SESSIONS) -->
+                <LinearLayout
+                    android:id="@+id/layoutLiveTelemetrySection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
                 <!-- Recording Stats Banner -->
                 <com.google.android.material.card.MaterialCardView
@@ -219,6 +225,66 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- Dedicated Charts & Engineering Analysis Access Banner (P4) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardQuickChartsAnalysis"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardBackgroundColor="#1E293B"
+                    app:cardCornerRadius="10dp"
+                    app:strokeColor="@color/primary"
+                    app:strokeWidth="1.5dp"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📊"
+                            android:textSize="22sp" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="CHARTS &amp; ENGINEERING ANALYSIS"
+                                android:textColor="@color/primary"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Direct access to 7 dedicated RF, Coverage, Mobility &amp; Traffic visual analysis sections"
+                                android:textColor="#94A3B8"
+                                android:textSize="10.5sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="OPEN ➔"
+                            android:textColor="@color/primary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
                 <!-- Live Serving Cell Card -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
@@ -361,7 +427,6 @@
 
                 <!-- Operator & Network Identity Card -->
                 <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardOperatorIdentity"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
@@ -532,6 +597,679 @@
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <!-- Inactive Banner shown when reviewing Historical/Imported session -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardLiveInactiveBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="10dp"
+                    app:strokeColor="@color/border"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:padding="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🔴 LIVE RADIO INACTIVE"
+                                android:textColor="@color/rf_poor"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvLiveInactiveDesc"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Currently inspecting saved dataset. Live telemetry is paused."
+                                android:textColor="@color/text_secondary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnResumeLiveTelemtry"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:minHeight="36dp"
+                            android:backgroundTint="@color/primary"
+                            android:text="Live Mode"
+                            android:textColor="@color/on_primary"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="6dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Selected Session Intelligence (9-Section Engineering Dashboard) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardSessionIntelligence"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="3dp"
+                    app:strokeColor="@color/primary"
+                    app:strokeWidth="1.5dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <!-- Section 1: Header & Session Identity -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:fontFamily="sans-serif-black"
+                                android:text="DATASET INTELLIGENCE"
+                                android:textColor="@color/primary"
+                                android:textSize="14sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSessionClear"
+                                style="@style/Widget.MaterialComponents.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:minHeight="32dp"
+                                android:padding="0dp"
+                                android:text="Live Mode"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Session: —"
+                            android:textColor="@color/on_surface"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelMeta"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Date &amp; Time • Operator • RAT"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+
+                        <!-- Core KPIs -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="DURATION"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvSessionIntelDuration"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="monospace"
+                                    android:text="—"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="DISTANCE"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvSessionIntelDistance"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="monospace"
+                                    android:text="—"
+                                    android:textColor="@color/rf_good"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1.2"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="SAMPLES &amp; GPS"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvSessionIntelSamples"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="monospace"
+                                    android:text="—"
+                                    android:textColor="@color/primary"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Section 2: Coverage Route Preview -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="COVERAGE ROUTE FOOTPRINT PREVIEW"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <com.cellscope.drive.ui.map.CoveragePreviewView
+                            android:id="@+id/coveragePreviewView"
+                            android:layout_width="match_parent"
+                            android:layout_height="220dp"
+                            android:layout_marginTop="6dp" />
+
+                        <!-- Section 3: Signal Quality & Distributions -->
+                        <TextView
+                            android:id="@+id/tvSessionIntelRsrpStats"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:fontFamily="monospace"
+                            android:text="RSRP: Mean — | Med — | P10 — | P90 —"
+                            android:textColor="@color/on_surface"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelRsrqStats"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="monospace"
+                            android:text="RSRQ: Mean — | Med — | P10 — | P90 —"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelDistribution"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Distribution: —"
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+
+                        <!-- Section 4: Serving Cells & Handover Breakdown -->
+                        <TextView
+                            android:id="@+id/tvSessionIntelCellsHandovers"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Cells &amp; Transitions: —"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+
+                        <!-- Section 5: Coverage Holes & Corridors -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="SUSPECTED COVERAGE HOLES &amp; ATTENUATION CORRIDORS"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelCoverageHoles"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Coverage Holes: Evaluating..."
+                            android:textColor="@color/on_surface"
+                            android:textSize="11.5sp" />
+
+                        <!-- Section 6: Congestion & Capacity Intelligence -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="CONGESTION &amp; CAPACITY INTELLIGENCE"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelCongestion"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Congestion Assessment: Evaluating..."
+                            android:textColor="@color/on_surface"
+                            android:textSize="11.5sp" />
+
+                        <!-- Section 7: Site Suitability & Capacity Recommendations -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="SITE SUITABILITY &amp; CAPACITY RECOMMENDATIONS"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelRanPlanning"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Planning Assessment: Evaluating..."
+                            android:textColor="@color/on_surface"
+                            android:textSize="11.5sp" />
+
+                        <!-- Section 8: Telemetry Integrity & Quality Audit -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="TELEMETRY INTEGRITY &amp; DATA AUDIT"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSessionIntelQualityWarnings"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:background="@drawable/bg_chip_badge"
+                            android:backgroundTint="@color/surface_variant"
+                            android:padding="8dp"
+                            android:text="Dataset Quality: All checks passed."
+                            android:textColor="@color/rf_fair"
+                            android:textSize="10.5sp" />
+
+                        <!-- Section 8b: Universal Event Capacity Simulator -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface_variant"
+                            app:cardCornerRadius="10dp"
+                            app:cardElevation="0dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-black"
+                                    android:text="UNIVERSAL EVENT CAPACITY PLANNER"
+                                    android:textColor="@color/primary"
+                                    android:textSize="11.5sp" />
+
+                                <TextView
+                                    android:id="@+id/tvEventVenueDesc"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Venue: Selected Map Site • Tap map to plan anywhere"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <TextView
+                                    android:id="@+id/tvEventMacroInventory"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Macro Inventory: Evaluating surveyed sector evidence in event radius…"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp" />
+
+                                <!-- Attendees & Profile Selector Chips -->
+                                <HorizontalScrollView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:scrollbars="none">
+
+                                    <LinearLayout
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:orientation="horizontal">
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chipEventAttendeesBase"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:checkable="true"
+                                            android:checked="false"
+                                            android:text="Baseline (1.2k)"
+                                            android:textColor="@color/on_surface"
+                                            android:textSize="10sp" />
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chipEventAttendees10k"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="4dp"
+                                            android:checkable="true"
+                                            android:checked="false"
+                                            android:text="+10,000 (Scenario A)"
+                                            android:textColor="@color/on_surface"
+                                            android:textSize="10sp" />
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chipEventAttendees20k"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="4dp"
+                                            android:checkable="true"
+                                            android:checked="true"
+                                            android:text="+20,000 (Scenario B)"
+                                            android:textColor="@color/on_surface"
+                                            android:textSize="10sp" />
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chipEventCowToggle"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="4dp"
+                                            android:checkable="true"
+                                            android:checked="false"
+                                            android:text="+ COW (+350M)"
+                                            android:textColor="@color/primary"
+                                            android:textSize="10sp" />
+                                    </LinearLayout>
+                                </HorizontalScrollView>
+
+                                <!-- Simulation Output Grid -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:orientation="horizontal">
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="OFFERED LOAD"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="9sp"
+                                            android:textStyle="bold" />
+
+                                        <TextView
+                                            android:id="@+id/tvEventOfferedLoad"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="monospace"
+                                            android:text="1,032 Mbps"
+                                            android:textColor="@color/rf_fair"
+                                            android:textSize="13sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="AVAILABLE"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="9sp"
+                                            android:textStyle="bold" />
+
+                                        <TextView
+                                            android:id="@+id/tvEventAvailableCap"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="monospace"
+                                            android:text="— Mbps"
+                                            android:textColor="@color/on_surface"
+                                            android:textSize="13sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="DEFICIT"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="9sp"
+                                            android:textStyle="bold" />
+
+                                        <TextView
+                                            android:id="@+id/tvEventDeficit"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="monospace"
+                                            android:text="— Mbps"
+                                            android:textColor="@color/rf_poor"
+                                            android:textSize="13sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="PRB LOAD"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="9sp"
+                                            android:textStyle="bold" />
+
+                                        <TextView
+                                            android:id="@+id/tvEventPrbLoad"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="monospace"
+                                            android:text="—%"
+                                            android:textColor="@color/rf_poor"
+                                            android:textSize="13sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/tvEventInterventions"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:background="@drawable/bg_chip_badge"
+                                    android:backgroundTint="@color/surface"
+                                    android:padding="8dp"
+                                    android:text="Interventions: Select a venue and attendees to evaluate candidate mitigations."
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:orientation="horizontal">
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnViewEventOnMap"
+                                        android:layout_width="0dp"
+                                        android:layout_height="38dp"
+                                        android:layout_marginEnd="4dp"
+                                        android:layout_weight="1"
+                                        android:backgroundTint="@color/primary"
+                                        android:text="VIEW ON MAP 🗺️"
+                                        android:textColor="@color/on_primary"
+                                        android:textSize="10sp"
+                                        android:textStyle="bold"
+                                        app:cornerRadius="6dp" />
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnCompareScenarios"
+                                        android:layout_width="0dp"
+                                        android:layout_height="38dp"
+                                        android:layout_marginStart="4dp"
+                                        android:layout_weight="1"
+                                        android:backgroundTint="@color/surface"
+                                        android:text="COMPARE SCENARIOS 📊"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="10sp"
+                                        android:textStyle="bold"
+                                        app:cornerRadius="6dp"
+                                        app:strokeColor="@color/border"
+                                        app:strokeWidth="1dp" />
+                                </LinearLayout>
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnManageSavedPlans"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="38dp"
+                                    android:layout_marginTop="6dp"
+                                    android:backgroundTint="@color/surface_variant"
+                                    android:text="SAVED EVENT PLANS &amp; EXPORT 📋"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold"
+                                    app:cornerRadius="6dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Section 9: Quick Navigation Action Bar -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSessionViewMap"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginEnd="2dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="@color/primary"
+                                android:text="Map"
+                                android:textColor="@color/on_primary"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                app:cornerRadius="6dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnOpenCoveragePlannerNav"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginHorizontal="2dp"
+                                android:layout_weight="1.2"
+                                android:backgroundTint="@color/rf_good"
+                                android:text="Planner"
+                                android:textColor="@color/on_primary"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                app:cornerRadius="6dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSessionViewAnalytics"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginHorizontal="2dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="@color/surface_variant"
+                                android:text="Analytics"
+                                android:textColor="@color/on_surface"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                app:cornerRadius="6dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSessionExportReport"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginStart="2dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="@color/surface_variant"
+                                android:text="Export"
+                                android:textColor="@color/on_surface"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
@@ -550,214 +1288,477 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- Floating Map Control Chips -->
-            <HorizontalScrollView
+            <!-- Compact Floating Top Bar: Quick Layer Pill, HUD Toggle, Reset View -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top"
-                android:background="#CC121212"
-                android:scrollbars="none">
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <LinearLayout
+                <!-- Quick Collapsible Layers Pill -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/btnToggleLayersPanel"
                     android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    app:cardBackgroundColor="#E618181E"
+                    app:cardCornerRadius="18dp"
+                    app:cardElevation="4dp"
+                    app:strokeColor="#3F3F46"
+                    app:strokeWidth="1dp"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp">
+
+                        <TextView
+                            android:id="@+id/tvActiveLayerBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🗺️ Route (RSRP) ▾"
+                            android:textColor="@color/on_surface"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <!-- Quick HUD Toggle Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnToggleHud"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="8dp"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="📊"
+                    android:textColor="@color/on_surface"
+                    android:textSize="13sp"
+                    app:backgroundTint="#E618181E"
+                    app:cornerRadius="18dp"
+                    app:strokeColor="#3F3F46"
+                    app:strokeWidth="1dp" />
+
+                <!-- Quick Reset View Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnQuickReset"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="↺"
+                    android:textColor="@color/rf_fair"
+                    android:textSize="14sp"
+                    app:backgroundTint="#E618181E"
+                    app:cornerRadius="18dp"
+                    app:strokeColor="#3F3F46"
+                    app:strokeWidth="1dp" />
+            </LinearLayout>
+
+            <!-- Collapsible Map Layers & Filters Panel (Dismissible / Scrollable) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardLayersPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="56dp"
+                android:layout_marginEnd="12dp"
+                app:cardBackgroundColor="#F218181E"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="8dp"
+                app:strokeColor="#3F3F46"
+                app:strokeWidth="1dp"
+                android:visibility="gone">
+
+                <ScrollView
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="8dp">
+                    android:scrollbars="vertical">
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipRoute"
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:checkable="true"
-                        android:checked="true"
-                        android:text="Route"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                        android:orientation="vertical"
+                        android:padding="12dp">
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipHeatmap"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="Heatmap"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                        <!-- Header: Title and Close -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipTransitions"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="true"
-                        android:text="Handovers"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="MAP LAYERS &amp; CONTROLS"
+                                android:textColor="@color/primary"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipTowers"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="Towers (Exp)"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                            <TextView
+                                android:id="@+id/btnCloseLayersPanel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:padding="4dp"
+                                android:text="Close ▲"
+                                android:textColor="#94A3B8"
+                                android:textSize="11sp" />
+                        </LinearLayout>
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipOfflineMap"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="false"
-                        android:text="Offline Map"
-                        android:textColor="@color/primary"
-                        android:textSize="11sp" />
+                        <!-- Group 1: LAYERS -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="LAYERS (Independent Multi-Layer Selection)"
+                            android:textColor="#94A3B8"
+                            android:textSize="9.5sp"
+                            android:textStyle="bold" />
 
-                    <View
-                        android:layout_width="1dp"
-                        android:layout_height="20dp"
-                        android:layout_gravity="center_vertical"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginEnd="4dp"
-                        android:background="#444444" />
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:scrollbars="none">
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipMetricRsrp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="true"
-                        android:text="Metric: RSRP"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="4dp">
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipMetricRsrq"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="Metric: RSRQ"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeRoute"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:checkable="true"
+                                    android:checked="true"
+                                    android:text="Route &amp; Samples"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipMetricSinr"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="Metric: SINR"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeHandovers"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Handovers"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipMetricGen"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="Metric: Generation"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeSites"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Cell Sites"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <View
-                        android:layout_width="1dp"
-                        android:layout_height="20dp"
-                        android:layout_gravity="center_vertical"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginEnd="4dp"
-                        android:background="#444444" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeHeatmap"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Heatmap"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipFilterGenAll"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="true"
-                        android:text="Gen: All"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeHoles"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Weak Zones"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipFilterGen5g"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="5G"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeHotspots"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Hotspots"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipFilterGen4g"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="4G"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeEvent"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Event Planner 📍"
+                                    android:textColor="@color/primary"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipFilterGen3g"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="3G"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeQoe"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Active QoE 📶"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipFilterGen2g"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="2G"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipModeAll"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="All Layers"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+                            </LinearLayout>
+                        </HorizontalScrollView>
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipFilterGenHoles"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:checkable="true"
-                        android:checked="false"
-                        android:text="Holes/Drops"
-                        android:textColor="@color/on_surface"
-                        android:textSize="11sp" />
-                </LinearLayout>
-            </HorizontalScrollView>
+                        <!-- Group 2: NETWORK (RAT) -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="NETWORK (RAT Filter)"
+                            android:textColor="#94A3B8"
+                            android:textSize="9.5sp"
+                            android:textStyle="bold" />
 
-            <!-- Route Timeline Scrubber Card -->
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="4dp">
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipFilterGenAll"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:checkable="true"
+                                    android:checked="true"
+                                    android:text="All RATs"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipFilterGen5g"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="5G NR"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipFilterGen4g"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="4G LTE"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipFilterGen3g"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="3G UMTS"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipFilterGen2g"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="2G GSM"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipFilterGenHoles"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Holes/Drops"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+                            </LinearLayout>
+                        </HorizontalScrollView>
+
+                        <!-- Group 3: METRIC -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="METRIC (Color Scale)"
+                            android:textColor="#94A3B8"
+                            android:textSize="9.5sp"
+                            android:textStyle="bold" />
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="4dp">
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipMetricRsrp"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:checkable="true"
+                                    android:checked="true"
+                                    android:text="RSRP (dBm)"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipMetricRsrq"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="RSRQ (dB)"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipMetricSinr"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="SINR (dB)"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipMetricGen"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:checkable="true"
+                                    android:checked="false"
+                                    android:text="Generation (Tech)"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="10.5sp" />
+                            </LinearLayout>
+                        </HorizontalScrollView>
+
+                        <!-- Group 4: TOOLS -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="TOOLS &amp; ACTIONS"
+                            android:textColor="#94A3B8"
+                            android:textSize="9.5sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp">
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipOfflineMap"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checkable="false"
+                                android:text="Offline Basemap"
+                                android:textColor="@color/primary"
+                                android:textSize="10.5sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnResetLayers"
+                                style="@style/Widget.MaterialComponents.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:layout_marginStart="8dp"
+                                android:text="Reset Layers ↺"
+                                android:textColor="@color/rf_fair"
+                                android:textSize="10.5sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </ScrollView>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Route Timeline Scrubber Card (Dedicated non-overlapping bottom overlay) -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardRouteScrubber"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|start"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="88dp"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="#D91E1E1E"
-                app:cardCornerRadius="10dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="84dp"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="#F218181E"
+                app:cardCornerRadius="12dp"
                 app:cardElevation="6dp"
-                app:strokeColor="#333333"
+                app:strokeColor="#3F3F46"
                 app:strokeWidth="1dp"
                 android:visibility="gone">
 
@@ -786,11 +1787,32 @@
                             android:id="@+id/tvScrubberTech"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
                             android:text="4G LTE"
                             android:textColor="@color/primary"
                             android:textSize="10.5sp"
                             android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnCloseScrubber"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:padding="2dp"
+                            android:text="✕"
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
                     </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvScrubberMetrics"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="monospace"
+                        android:text="RSRP: — | RSRQ: — | SINR: — | Cell: —"
+                        android:textColor="#E2E8F0"
+                        android:textSize="9.5sp" />
 
                     <SeekBar
                         android:id="@+id/seekBarRouteScrubber"
@@ -874,7 +1896,6 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/tvCellScanTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
@@ -998,6 +2019,169 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+                <!-- Analytical Views Selector (P1) -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfViewScatter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="true"
+                            android:checked="true"
+                            android:text="Frequency Scatter"
+                            android:textColor="@color/on_surface"
+                            android:textSize="10.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfViewInventory"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="Band Inventory"
+                            android:textColor="@color/on_surface"
+                            android:textSize="10.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfViewServing"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="Serving vs. Neighbor"
+                            android:textColor="@color/on_surface"
+                            android:textSize="10.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfViewReuse"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="PCI Reuse"
+                            android:textColor="@color/on_surface"
+                            android:textSize="10.5sp" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+
+                <!-- Unified RF Telemetry Freshness & Cell Count Header -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tvRfGraphFreshness"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Telemetry Freshness: Waiting for live RF update..."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10.5sp" />
+
+                    <TextView
+                        android:id="@+id/tvRfCellCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 cells observed"
+                        android:textColor="@color/primary"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Band Filter Scroll -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfBandAll"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="true"
+                            android:checked="true"
+                            android:text="All Bands"
+                            android:textColor="@color/on_surface"
+                            android:textSize="9.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfBand1"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="B1 (2100)"
+                            android:textColor="@color/on_surface"
+                            android:textSize="9.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfBand3"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="B3 (1800)"
+                            android:textColor="@color/on_surface"
+                            android:textSize="9.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfBand8"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="B8 (900)"
+                            android:textColor="@color/on_surface"
+                            android:textSize="9.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfBand28"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="B28 (700)"
+                            android:textColor="@color/on_surface"
+                            android:textSize="9.5sp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipRfBand40"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:checkable="true"
+                            android:checked="false"
+                            android:text="B40 (2300)"
+                            android:textColor="@color/on_surface"
+                            android:textSize="9.5sp" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1023,7 +2207,6 @@
 
                 <!-- Interactive Selected Cell Inspection Card -->
                 <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardSelectedCellDetails"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
@@ -1160,6 +2343,16 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Planning" />
+
+                <com.google.android.material.tabs.TabItem
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Active QoE" />
+
+                <com.google.android.material.tabs.TabItem
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="RAT Compare" />
             </com.google.android.material.tabs.TabLayout>
 
             <FrameLayout
@@ -1168,83 +2361,186 @@
                 android:padding="16dp">
 
                 <!-- Sub-tab 1: Coverage Heatmap Analytics -->
-                <LinearLayout
+                <androidx.core.widget.NestedScrollView
                     android:id="@+id/subLayoutCoverage"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:orientation="vertical"
+                    android:fillViewport="true"
                     android:visibility="visible">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-bold"
-                        android:text="Spatial Coverage Estimation"
-                        android:textColor="@color/on_surface"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="Motion-Aware Inverse Distance Weighting (IDW)"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
-
-                    <com.google.android.material.card.MaterialCardView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        app:cardBackgroundColor="@color/surface"
-                        app:cardCornerRadius="8dp"
-                        app:strokeColor="@color/border"
-                        app:strokeWidth="1dp">
+                        android:orientation="vertical">
 
-                        <LinearLayout
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Spatial Coverage Estimation"
+                            android:textColor="@color/on_surface"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Motion-Aware Inverse Distance Weighting (IDW)"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <com.google.android.material.card.MaterialCardView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="12dp">
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
 
-                            <TextView
-                                android:id="@+id/tvCoverageArea"
+                            <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="Area Evaluated: 0.00 km²"
-                                android:textColor="@color/on_surface"
-                                android:textSize="13sp" />
+                                android:orientation="vertical"
+                                android:padding="12dp">
 
-                            <TextView
-                                android:id="@+id/tvCoverageAvgRsrp"
+                                <TextView
+                                    android:id="@+id/tvCoverageArea"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="Area Evaluated: 0.00 km²"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvCoverageAvgRsrp"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Surface Mean RSRP: — dBm"
+                                    android:textColor="@color/rf_good"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvCoverageWeakPct"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Weak Coverage Ratio: 0.0%"
+                                    android:textColor="@color/rf_fair"
+                                    android:textSize="13sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnRecomputeCoverage"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="12dp"
+                            android:backgroundTint="@color/primary"
+                            android:text="Recalculate Surface"
+                            android:textColor="@color/on_primary"
+                            android:textSize="13sp"
+                            app:cornerRadius="8dp" />
+
+                        <!-- Chart 8: 3GPP TS 36.133 Coverage Quality Stacked Bar -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="Surface Mean RSRP: — dBm"
-                                android:textColor="@color/rf_good"
-                                android:textSize="13sp" />
+                                android:orientation="vertical"
+                                android:padding="12dp">
 
-                            <TextView
-                                android:id="@+id/tvCoverageWeakPct"
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="3GPP TS 36.133 Quality Breakdown"
+                                    android:textColor="@color/primary"
+                                    android:textSize="13sp" />
+
+                                <com.cellscope.drive.ui.analytics.CoverageQualityBreakdownView
+                                    android:id="@+id/chartCoverageQuality"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="90dp"
+                                    android:layout_marginTop="8dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Chart 3: RSRP Distribution Histogram -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="Weak Coverage Ratio: 0.0%"
-                                android:textColor="@color/rf_fair"
-                                android:textSize="13sp" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                                android:orientation="vertical"
+                                android:padding="12dp">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnRecomputeCoverage"
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="16dp"
-                        android:backgroundTint="@color/primary"
-                        android:text="Recalculate Surface"
-                        android:textColor="@color/on_primary"
-                        android:textSize="13sp"
-                        app:cornerRadius="8dp" />
-                </LinearLayout>
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="RSRP Signal Distribution Histogram"
+                                    android:textColor="@color/rf_good"
+                                    android:textSize="13sp" />
+
+                                <com.cellscope.drive.ui.analytics.SignalDistributionHistogramView
+                                    android:id="@+id/chartSignalHistogram"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="180dp"
+                                    android:layout_marginTop="8dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Chart 7: RAT / Carrier Breakdown -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="16dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="Radio Access Technology (RAT) Breakdown"
+                                    android:textColor="#38BDF8"
+                                    android:textSize="13sp" />
+
+                                <com.cellscope.drive.ui.analytics.RatChannelDistributionView
+                                    android:id="@+id/chartRatDistribution"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="140dp"
+                                    android:layout_marginTop="8dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
 
                 <!-- Sub-tab 2: Frequency & PCI Reuse Analysis (Priorities 2 & 3) -->
                 <androidx.core.widget.NestedScrollView
@@ -1352,7 +2648,6 @@
 
                         <!-- Section A: Observed Same-Channel Cells -->
                         <com.google.android.material.card.MaterialCardView
-                            android:id="@+id/cardSameChannel"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
@@ -1390,7 +2685,6 @@
 
                         <!-- Section B: Downlink CRS Modulo-3 Analysis (3GPP TS 36.211) -->
                         <com.google.android.material.card.MaterialCardView
-                            android:id="@+id/cardPciMod3"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
@@ -1428,7 +2722,6 @@
 
                         <!-- Section C: Adjacent-Channel Carrier Assessment -->
                         <com.google.android.material.card.MaterialCardView
-                            android:id="@+id/cardAdjacentChannel"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
@@ -1529,6 +2822,142 @@
                                     android:text="Waiting for RF measurements…"
                                     android:textColor="@color/on_surface"
                                     android:textSize="11sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Chart 1: Signal vs Time Chart -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="Signal vs. Time (RSRP &amp; RSRQ)"
+                                    android:textColor="@color/primary"
+                                    android:textSize="13sp" />
+
+                                <com.cellscope.drive.ui.analytics.SignalTimeSeriesChartView
+                                    android:id="@+id/chartSignalTimeSeries"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="180dp"
+                                    android:layout_marginTop="8dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Chart 2: Signal vs Route Distance Chart -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="Signal vs. Route Distance (km)"
+                                    android:textColor="@color/rf_good"
+                                    android:textSize="13sp" />
+
+                                <com.cellscope.drive.ui.analytics.SignalDistanceChartView
+                                    android:id="@+id/chartSignalDistance"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="180dp"
+                                    android:layout_marginTop="8dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Chart 4: RSRP vs RSRQ Scatter Plot -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="RSRP vs. RSRQ Quality Scatter"
+                                    android:textColor="#F59E0B"
+                                    android:textSize="13sp" />
+
+                                <com.cellscope.drive.ui.analytics.SignalQualityScatterView
+                                    android:id="@+id/chartQualityScatter"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="180dp"
+                                    android:layout_marginTop="8dp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Chart 6: Vehicle Speed vs Signal Quality Chart -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="Vehicle Speed vs. RSRP [MEASURED]"
+                                    android:textColor="#38BDF8"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Observed scalar GPS speed vs. RSRP. Note: Not a Doppler shift measurement. Doppler estimate requires relative radial velocity vr and carrier frequency fc."
+                                    android:textColor="#94A3B8"
+                                    android:textSize="10sp" />
+
+                                <com.cellscope.drive.ui.analytics.SpeedVsSignalChartView
+                                    android:id="@+id/chartSpeedVsSignal"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="180dp"
+                                    android:layout_marginTop="8dp" />
                             </LinearLayout>
                         </com.google.android.material.card.MaterialCardView>
 
@@ -1697,10 +3126,43 @@
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
+                    <!-- Chart 5: Mobility & Transition Timeline View -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        app:cardBackgroundColor="@color/surface"
+                        app:cardCornerRadius="8dp"
+                        app:strokeColor="@color/border"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="Cell Transition &amp; Mobility Timeline"
+                                android:textColor="@color/primary"
+                                android:textSize="13sp" />
+
+                            <com.cellscope.drive.ui.analytics.MobilityTimelineView
+                                android:id="@+id/chartMobilityTimeline"
+                                android:layout_width="match_parent"
+                                android:layout_height="150dp"
+                                android:layout_marginTop="8dp" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/rvTransitions"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
                         android:layout_marginTop="10dp" />
                 </LinearLayout>
 
@@ -1769,7 +3231,6 @@
 
                     <!-- Explainable AI Anomaly Detection Card -->
                     <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardAnomalySummary"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
@@ -1811,6 +3272,694 @@
                         android:layout_marginTop="4dp" />
                 </LinearLayout>
 
+                <!-- Sub-tab 8: Active QoE & Congestion Monitoring -->
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/subLayoutQoe"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Active Network QoE &amp; Congestion Engine"
+                            android:textColor="@color/on_surface"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Bounded 5m/10m periodic HTTP tests, multi-probe latency &amp; baseline choke inference"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <!-- Active Network QoE Automation & Scheduler Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <!-- Auto-Testing Switch & State Badge -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:fontFamily="sans-serif-bold"
+                                        android:text="Automatic QoE Testing"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="13sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQoeStateBadge"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:background="@color/surface_variant"
+                                        android:paddingStart="8dp"
+                                        android:paddingTop="3dp"
+                                        android:paddingEnd="8dp"
+                                        android:paddingBottom="3dp"
+                                        android:text="IDLE"
+                                        android:textColor="@color/text_secondary"
+                                        android:textSize="10.5sp"
+                                        android:textStyle="bold" />
+
+                                    <com.google.android.material.switchmaterial.SwitchMaterial
+                                        android:id="@+id/switchQoeAutoTesting"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="8dp"
+                                        android:checked="true" />
+                                </LinearLayout>
+
+                                <!-- Testing Interval Selection -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Interval:"
+                                        android:textColor="@color/text_secondary"
+                                        android:textSize="11sp"
+                                        android:textStyle="bold" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chipQoeInterval10m"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="8dp"
+                                        android:checkable="true"
+                                        android:checked="true"
+                                        android:text="10 min (Default)"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="10sp" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chipQoeInterval5m"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="4dp"
+                                        android:checkable="true"
+                                        android:checked="false"
+                                        android:text="5 min"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="10sp" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chipQoeIntervalCustom"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="4dp"
+                                        android:checkable="true"
+                                        android:checked="false"
+                                        android:text="Custom..."
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="10sp" />
+                                </LinearLayout>
+
+                                <!-- Schedule Timestamps and Skip Reasons -->
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:orientation="vertical">
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:orientation="horizontal">
+
+                                        <TextView
+                                            android:id="@+id/tvQoeLastCompletedTime"
+                                            android:layout_width="0dp"
+                                            android:layout_height="wrap_content"
+                                            android:layout_weight="1"
+                                            android:text="Last Completed: —"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="11sp" />
+
+                                        <TextView
+                                            android:id="@+id/tvQoeNextRun"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="Next Scheduled Run: —"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="11sp" />
+                                    </LinearLayout>
+
+                                    <TextView
+                                        android:id="@+id/tvQoeSkipReason"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="3dp"
+                                        android:text="Status Note: Awaiting active survey session"
+                                        android:textColor="@color/text_secondary"
+                                        android:textSize="10.5sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="10dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnRunQoeTestNow"
+                                        android:layout_width="0dp"
+                                        android:layout_height="38dp"
+                                        android:layout_weight="1"
+                                        android:backgroundTint="@color/primary"
+                                        android:text="RUN TEST NOW ⚡"
+                                        android:textColor="@color/on_primary"
+                                        android:textSize="11sp"
+                                        android:textStyle="bold"
+                                        app:cornerRadius="6dp" />
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnConfigureQoeBudget"
+                                        android:layout_width="0dp"
+                                        android:layout_height="38dp"
+                                        android:layout_marginStart="8dp"
+                                        android:layout_weight="1"
+                                        android:backgroundTint="@color/surface_variant"
+                                        android:text="TRANSFER BUDGET ⚙️"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="11sp"
+                                        android:textStyle="bold"
+                                        app:cornerRadius="6dp"
+                                        app:strokeColor="@color/border"
+                                        app:strokeWidth="1dp" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Data Budget & Usage Summary Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Cumulative Data Usage &amp; Limits"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold" />
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/tvQoeSessionUsage"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="Survey Session: 0.00 MB"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="11.5sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQoeDailyUsage"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="Daily: 0.00 MB / Unlimited"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="11.5sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/tvQoePerTestLimits"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Per-Test Stream Limits: 1024 KB DL / 128 KB UL (Configurable)"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10.5sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Throughput & Latency KPI Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Latest Measured Performance"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold" />
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:orientation="horizontal">
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:id="@+id/tvQoeDlSpeed"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="sans-serif-black"
+                                            android:text="— Mbps"
+                                            android:textColor="@color/primary"
+                                            android:textSize="20sp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="Download (Mbps)"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="10sp" />
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:id="@+id/tvQoeUlSpeed"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="sans-serif-black"
+                                            android:text="— Mbps"
+                                            android:textColor="@color/on_surface"
+                                            android:textSize="20sp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="Upload (Mbps)"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="10sp" />
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:orientation="vertical">
+
+                                        <TextView
+                                            android:id="@+id/tvQoeLatency"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:fontFamily="sans-serif-black"
+                                            android:text="— ms"
+                                            android:textColor="@color/rf_good"
+                                            android:textSize="20sp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="RTT Median (ms)"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="10sp" />
+                                    </LinearLayout>
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/tvQoeMeanLatency"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="Mean: — ms"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="11sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQoeP95Latency"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="P95: — ms"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="11sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/tvQoeJitter"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="Jitter: — ms (RFC 3550 |ΔRTT|)"
+                                        android:textColor="@color/text_secondary"
+                                        android:textSize="10.5sp" />
+
+                                    <TextView
+                                        android:id="@+id/tvQoeProbeLoss"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Probe Loss: 0.0% (5/5)"
+                                        android:textColor="@color/text_secondary"
+                                        android:textSize="10.5sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/tvQoeEndpoint"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:text="Endpoint: https://speed.cloudflare.com"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp" />
+
+                                <TextView
+                                    android:id="@+id/tvQoeBytesTransferred"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Transferred: DL — KB, UL — KB"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp" />
+
+                                <TextView
+                                    android:id="@+id/tvQoeBaselineComparison"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:text="Baseline: No historical baseline available for this cell yet."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Congestion Classification Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:id="@+id/tvQoeClassificationTitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="Classification: Insufficient Evidence"
+                                    android:textColor="@color/primary"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvQoeClassificationSummary"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Active mobile throughput or latency tests are required to evaluate capacity constraints."
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/tvQoeWhyThisResult"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="At least 3 completed test cycles under comparable radio conditions are required to establish a defensible baseline."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp" />
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:text="Disclosure: Handset-side evidence only. True PRB scheduler utilization requires operator ENM/OSS counters."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp"
+                                    android:textStyle="italic" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+
+                <!-- Sub-tab 9: RAT Mobility & 2G/3G/4G/5G Cross-Generation Comparison -->
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/subLayoutRatCompare"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="RAT Mobility &amp; Cross-Generation Analysis"
+                            android:textColor="@color/on_surface"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/tvRatDominantText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Comparing 5G NR, 4G LTE, 3G WCDMA, and 2G GSM using native 3GPP parameters."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvRatSummaryText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Evaluating generation breakdown and parameter distributions..."
+                            android:textColor="@color/on_surface"
+                            android:textSize="12sp" />
+
+                        <!-- 5G NR Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:id="@+id/tvRat5gTitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="5G NR (New Radio)"
+                                    android:textColor="@color/primary"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvRat5gDetails"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Not observed in survey session (Handset or network operated on other RATs; zero measurements fabricated)."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- 4G LTE Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:id="@+id/tvRat4gTitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="4G LTE (Long-Term Evolution)"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvRat4gDetails"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Evaluating LTE metrics..."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- 3G WCDMA Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:id="@+id/tvRat3gTitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="3G UMTS / WCDMA / HSPA"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvRat3gDetails"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Not observed in survey session."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- 2G GSM Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            app:cardBackgroundColor="@color/surface"
+                            app:cardCornerRadius="8dp"
+                            app:strokeColor="@color/border"
+                            app:strokeWidth="1dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="12dp">
+
+                                <TextView
+                                    android:id="@+id/tvRat2gTitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:text="2G GSM / EDGE"
+                                    android:textColor="@color/on_surface"
+                                    android:textSize="13sp" />
+
+                                <TextView
+                                    android:id="@+id/tvRat2gDetails"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Not observed in survey session."
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
             </FrameLayout>
         </LinearLayout>
 
@@ -1867,6 +4016,18 @@
                     android:layout_height="match_parent"
                     android:orientation="vertical"
                     android:visibility="visible">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnImportCsv"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginBottom="12dp"
+                        android:backgroundTint="@color/primary"
+                        android:text="📥 Import Field Dataset (CSV)"
+                        android:textColor="@color/on_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
 
                     <TextView
                         android:id="@+id/tvEmptySessions"

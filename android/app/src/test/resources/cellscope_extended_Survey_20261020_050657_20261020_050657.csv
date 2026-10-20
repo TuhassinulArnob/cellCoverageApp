@@ -1,0 +1,43 @@
+# CellScope Extended Telemetry Format v3.0
+Timestamp,Latitude,Longitude,Speed (km/h),Serving Cell ID,Serving Cell RSRP,Serving Cell RSRQ,Serving Cell CINR,Handover Trigger,TAC,EARFCN,RSSI (dBm),Network Type,Operator,Altitude (m),Accuracy (m),Bearing (deg),ECI,CQI,Timing Advance,GPS Valid,Transition Type,Serving RAT,Channel Number,Channel Type,Primary Signal (dBm),Signal Metric Type,Secondary Signal (dB)
+2026-10-20T05:06:57.100+06:00,23.810331,90.412518,12.50,4,-85,-8,14.5,0,50030,1399,-80,LTE,Robi,15.2,3.5,120.0,268435457,12,1,1,,4G,1399,EARFCN,-85,LTE_RSRP,14.5
+2026-10-20T05:06:58.100+06:00,23.810450,90.412620,12.80,4,-86,-8,14.0,0,50030,1399,-81,LTE,Robi,15.2,3.5,120.0,268435457,12,1,1,,4G,1399,EARFCN,-86,LTE_RSRP,14.0
+2026-10-20T05:06:59.100+06:00,23.810570,90.412730,13.10,4,-88,-9,12.5,0,50030,1399,-82,LTE,Robi,15.3,3.5,120.0,268435457,11,1,1,,4G,1399,EARFCN,-88,LTE_RSRP,12.5
+2026-10-20T05:07:00.100+06:00,23.810690,90.412840,13.00,5,-92,-10,9.0,1,50030,1399,-85,LTE,Robi,15.4,3.8,120.0,268435458,9,2,1,INTRA_LTE,4G,1399,EARFCN,-92,LTE_RSRP,9.0
+2026-10-20T05:07:01.100+06:00,23.810810,90.412950,12.40,5,-94,-11,7.5,0,50030,1399,-87,LTE,Robi,15.4,3.8,120.0,268435458,8,2,1,,4G,1399,EARFCN,-94,LTE_RSRP,7.5
+2026-10-20T05:07:02.100+06:00,23.810930,90.413060,11.80,12,-72,,,0,12040,62,-72,2G_GSM,Robi,15.5,4.0,120.0,12345,,,1,INTER_RAT,2G,62,ARFCN,-72,GSM_RSSI,
+2026-10-20T05:07:03.100+06:00,23.811050,90.413170,11.50,12,-73,,,0,12040,62,-73,2G_GSM,Robi,15.5,4.0,120.0,12345,,,1,,2G,62,ARFCN,-73,GSM_RSSI,
+2026-10-20T05:07:04.100+06:00,23.811170,90.413280,10.20,15,-70,,,0,12040,0,-70,2G_GSM,Robi,15.6,4.2,120.0,12346,,,1,CELL_RESELECTION,2G,0,ARFCN,-70,GSM_RSSI,
+2026-10-20T05:07:05.100+06:00,23.811290,90.413390,9.50,18,-76,,,0,12040,980,-76,2G_GSM,Robi,15.6,4.2,120.0,12347,,,1,,2G,980,ARFCN,-76,GSM_RSSI,
+2026-10-20T05:07:06.100+06:00,23.811410,90.413500,8.00,501,-82,-10,15.0,0,50030,632000,-75,5G_NR,Robi,15.7,3.0,120.0,10737418241,14,,1,UPGRADE,5G,632000,NR_ARFCN,-82,NR_SS_RSRP,15.0
+2026-10-20T05:07:07.100+06:00,,,0.00,501,-84,-10,14.0,0,50030,632000,-76,5G_NR,Robi,,,0.0,10737418241,13,,0,,5G,632000,NR_ARFCN,-84,NR_SS_RSRP,14.0
+INVALID_TELEMETRY_ROW_WITH_CORRUPT_FIELDS,EXTRA,TRUNCATED
+
+# Active QoE & Congestion Section
+test_id,session_id,timestamp_iso,timestamp_epoch_ms,test_trigger,test_status,skipped_reason,scheduled_epoch_ms,execution_delay_ms,latitude,longitude,gps_accuracy_m,serving_rat,serving_pci,serving_channel,serving_rsrp_dbm,endpoint_url,download_throughput_mbps,upload_throughput_mbps,download_bytes_transferred,upload_bytes_transferred,download_duration_ms,upload_duration_ms,rtt_median_ms,rtt_mean_ms,rtt_p95_ms,jitter_ms,probe_loss_pct,probes_attempted,probes_successful,classification,data_provenance
+101,1,2026-10-20T05:06:57.500+06:00,1792451217500,SURVEY_AUTOMATION,COMPLETED,,1792451217000,500,23.810331,90.412518,3.5,4G,4,1399,-85,https://speed.cloudflare.com/__down?bytes=10000000,45.20,12.80,10485760,2097152,1855,1310,28,29.2,35.0,3.20,0.0,4,4,HEALTHY_UNCONGESTED,MEASURED_ACTIVE_TEST
+102,1,2026-10-20T05:07:01.500+06:00,1792451221500,SURVEY_AUTOMATION,COMPLETED,,1792451221000,500,23.810810,90.412950,3.8,4G,5,1399,-94,https://speed.cloudflare.com/__down?bytes=10000000,1.20,0.40,1500000,400000,10000,8000,185,190.5,240.0,42.50,15.0,4,3,RADIO_AND_BACKHAUL_CONGESTION,MEASURED_ACTIVE_TEST
+103,1,2026-10-20T05:07:03.500+06:00,1792451223500,SURVEY_AUTOMATION,FAILED,DNS resolution timeout after 5000ms,1792451223000,500,23.811050,90.413170,4.0,2G,12,62,-73,https://speed.cloudflare.com/__down?bytes=10000000,,,,,,,,,,100.0,4,0,DNS_OR_ROUTING_FAILURE,MEASURED_ACTIVE_TEST
+104,1,2026-10-20T05:07:05.500+06:00,1792451225500,SURVEY_AUTOMATION,SKIPPED,Data budget exceeded: 120MB used,1792451225000,500,23.811290,90.413390,4.2,2G,18,980,-76,https://speed.cloudflare.com/__down?bytes=10000000,,,,,,,,,,0.0,0,0,SKIPPED_POLICY_BUDGET,USER_CONFIGURED_RESTRICTION
+MALFORMED_QOE_RECORD_MISSING_MOST_COLUMNS
+
+# Cell Transitions (Mobility & Handover) Section
+Timestamp,Latitude,Longitude,Event Type,From RAT,To RAT,From PCI,To PCI,From Channel,To Channel,From Cell ID,To Cell ID,From Signal (dBm),To Signal (dBm),From TAC/LAC,To TAC/LAC,Confidence Score,Details
+2026-10-20T05:07:00.100+06:00,23.810690,90.412840,INTRA_LTE,4G,4G,4,5,1399,1399,268435457,268435458,-88,-92,50030,50030,0.95,Intra-LTE handover from PCI 4 to PCI 5
+2026-10-20T05:07:02.100+06:00,23.810930,90.413060,INTER_RAT,4G,2G,5,12,1399,62,268435458,12345,-94,-72,50030,12040,0.85,Inter-RAT transition from 4G LTE to 2G GSM ARFCN 62
+2026-10-20T05:07:04.100+06:00,23.811170,90.413280,CELL_RESELECTION,2G,2G,12,15,62,0,12345,12346,-73,-70,12040,12040,0.75,2G cell reselection from ARFCN 62 to ARFCN 0
+
+# Network Continuity Events Section
+Timestamp,Latitude,Longitude,Accuracy (m),From Generation,To Generation,From Tech,To Tech,Transition Category,From Signal (dBm),To Signal (dBm),Duration (s),Data Connectivity State,Evidence Classification,Details
+2026-10-20T05:07:02.100+06:00,23.810930,90.413060,4.0,4G,2G,LTE,GSM,DOWNGRADE,-94,-72,2,CONNECTED,OBSERVED_RAT_CHANGE,Radio downgraded from 4G to 2G EDGE
+2026-10-20T05:07:06.100+06:00,23.811410,90.413500,3.0,2G,5G,GSM,NR,UPGRADE,-76,-82,4,CONNECTED,CONFIRMED_GENERATION_TRANSITION,Radio upgraded from 2G to 5G NR n78
+
+# Service Holes Section
+Timestamp,Latitude,Longitude,Accuracy (m),Hole Type,Severity,Duration (ms),Recovery Timestamp,RSRP (dBm),Network Type,Network Generation,Engineering Evidence,Resolution Status
+2026-10-20T05:07:03.500+06:00,23.811050,90.413170,4.0,INTERNET_TEST_FAILURE,HIGH,5000,1792451228500,-73,2G_GSM,2G,DNS timeout and probe loss during survey,RECOVERED
+2026-10-20T05:07:07.100+06:00,23.811500,90.413600,10.0,GPS_UNCERTAINTY_GAP,MEDIUM,2000,1792451229100,-84,5G_NR,5G,Missing GPS fix in corridor,RECOVERED
+
+# Call Reliability Section
+Timestamp,Latitude,Longitude,Accuracy (m),Call State,Classification,Previous State,Network Generation,Detailed Tech,RSRP (dBm),Service State,Call Duration (s),Risk Score Category,Evidence Factors
+2026-10-20T05:06:58.000+06:00,23.810450,90.412620,3.5,OFFHOOK,NORMAL_CALL_START,RINGING,4G,VoLTE,-86,IN_SERVICE,45,LOW,Normal VoLTE call setup
+2026-10-20T05:07:02.500+06:00,23.810950,90.413080,4.0,IDLE,NORMAL_CALL_END,OFFHOOK,2G,GSM,-72,IN_SERVICE,4,LOW,Call ended cleanly after handover

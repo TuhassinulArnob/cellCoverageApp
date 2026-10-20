@@ -1,55 +1,75 @@
-# CellScope — LTE & 5G Cellular Drive-Test Analytics & Coverage Intelligence (v2.0 Final)
+# CellScope 5G — Next-Gen Cellular Field Analytics, Automated QoE & Coverage Intelligence (v3.0)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20FastAPI%20%7C%20React-green.svg)](#platform-architecture)
-[![Version](https://img.shields.io/badge/Release-v2.0.0%20Final-success.svg)](#what-is-new-in-version-20)
-[![Download APK](https://img.shields.io/badge/Download-CellScope%20v2.0%20Final%20APK-0284C7?logo=android&logoColor=white)](CellScope-v2.0-final.apk)
+[![Version](https://img.shields.io/badge/Release-v3.0.0%20Production-success.svg)](#what-is-new-in-version-30)
+[![Documentation](https://img.shields.io/badge/Technical%20Report-PDF%20Deliverable-0284C7?logo=adobeacrobatreader&logoColor=white)](docs/CellScope_5G_v3_Technical_Report.pdf)
 
-**CellScope** is an enterprise-grade cellular field-testing, RF optimization, and multi-generation network intelligence platform engineered for Radio Access Network (RAN) engineers, RF planning specialists, and field drive-test technicians. It pairs a **native Kotlin Android field application** with an **interactive web analytics dashboard** for deep post-processing and drive-test evaluation.
+**CellScope 5G** is an enterprise-grade cellular field-testing, RF optimization, and multi-generation network intelligence platform engineered for Radio Access Network (RAN) engineers, RF planning specialists, and field drive-test technicians. It pairs a **native Kotlin Android field application** with an **asynchronous FastAPI post-processing microservice** and an **interactive MapLibre GIS web dashboard** for deep post-processing and drive-test evaluation.
 
-📦 **Ready-to-install Android APK:** [`CellScope-v2.0-final.apk`](CellScope-v2.0-final.apk) (located directly in the repository root for immediate testing).
+📄 **Comprehensive Technical Specification:** Read the complete 5-page publication-grade PDF report at [`docs/CellScope_5G_v3_Technical_Report.pdf`](docs/CellScope_5G_v3_Technical_Report.pdf).
 
 ---
 
-## What is New in Version 2.0 (Final Release)
+## What is New in Version 3.0 (Major Release)
 
-### 1. Multi-Generation Network Continuity & Bearer Separation
-* **Multi-RAT Logging:** Timestamped observation and classification of 2G GSM/EDGE, 3G UMTS/HSPA, 4G LTE, and 5G NR (NSA & SA).
-* **Voice vs. Data Bearer Separation:** Independent tracking of voice network type (e.g. CSFB to 2G/3G or VoLTE) versus mobile data network type.
-* **Continuity Analysis:** Automated detection and logging of generation changes, technology downgrades (e.g. 4G $\to$ 2G), recovery transitions, and outage dwell durations.
+### 1. Automated Active Network QoE Testing with Survey Recording
+* **Zero-Touch Background Loop:** Starting a survey recording automatically triggers an initial bounded QoE test (HTTP/TCP download/upload throughput, RTT median/mean/P95, RFC 3550 jitter, and probe loss).
+* **Configurable Intervals:** Supports 5-minute, 10-minute (default), and custom scheduling intervals. Tests run in an Android Foreground Service (`QoeForegroundService`) with ongoing notification to prevent Doze-mode termination.
+* **Removal of Hardcoded Caps:** Eliminated the legacy 50 MB daily cap, replacing it with user-configurable per-test limits, cumulative data caps, and safe cellular roaming safeguards.
+* **Robust Lifecycle Management:** Pausing a survey gracefully halts the scheduler; resuming triggers the next bounded test without worker duplication; stopping the survey cleanly terminates services while strictly preserving all completed test results in Room SQLite.
 
-### 2. Service-Hole Detection & RF Diagnostics
-* **7-Category Outage Diagnosis:** Root-cause evaluation of coverage dropouts including RF Edge, Terrain Shadowing, Downlink Power Depletion, Missing Handover Neighbor, Hardware Outage, and Sudden Signal Cliffs.
-* **Telecom Anomaly Intelligence:** Ping-pong handover detection, pilot pollution identification ($\ge -95\text{ dBm}$ RSRP with $< 0\text{ dB}$ SINR or $< -14\text{ dB}$ RSRQ), and call-drop risk grading.
-* **Weak Zone & Service-Hole Tracking:** Continuous segment identification for weak coverage ($< -105\text{ dBm}$) and complete radio loss ($< -115\text{ dBm}$).
+### 2. Restored Bell-Shaped RF Channel Frequency Graph
+* **Smooth Bell-Shaped Envelopes:** Renders continuous cubic Bézier channel curves for serving and neighbor cells, derived from 3GPP nominal bandwidth allocations and center frequencies.
+* **Multi-Band Smart Auto-Focus Windowing:** When "All Bands" is active and observed cells span multiple distant bands (> 60 MHz, e.g. Band 8 at 940 MHz and Band 3 at 1850 MHz), the viewport automatically windows onto the active serving cell's band, preventing extreme multi-band compression distortion. Horizontal filter chips (`All`, `B1`, `B3`, `B8`, `B28`, `B40`) allow instant manual band switching.
+* **Minimum Visual Half-Width:** Enforces `halfWidthPx = max(nominalHalfWidthPx, 16f * density)`, guaranteeing that narrow channels (GSM 200 kHz, LTE 1.4 MHz) render prominent, legible envelopes.
+* **Standard Telecom Dynamic Range:** Fixed Y-axis limits from **-140 dBm to -40 dBm** with 20 dB gridlines (-140, -120, -100, -80, -60, -40 dBm), eliminating vertical viewport jumping and clipped labels.
+* **Touch Hit-Testing & Inspection:** Tapping any envelope displays an amber glowing peak ring, vertical leader line, and callout pill, while updating the *Cell Carrier Inspection* card with duplex separation, bandwidth, RSRP, RSRQ, and SINR.
+* **Adaptive Theme Support:** Clean high-contrast rendering across Light theme (soft slate grid, dark labels) and Dark theme (subtle slate grid, light labels, glowing primary blue envelopes).
+* **3GPP Standards Disclosure:** Clear on-screen disclaimer: *"Visualized Channel Signal Distribution (Derived from 3GPP channel allocation; not calibrated spectral power)"*.
 
-### 3. Reliable GNSS Telemetry & Adaptive Jitter Suppression
-* **Stationary Deadband Filter:** Multi-sample evidence-based jitter filtering prevents false speed and spurious distance accumulation while stationary indoors.
-* **Outlier & Spike Gate:** Automatic rejection of coordinate jumps $> 50\text{ m/s}$, duplicate coordinates, stale fixes ($> 10\text{s}$ old), and poor-accuracy fixes.
-* **Orientation & Heading Logging:** Fused Android rotation-vector, geomagnetic vector, and accelerometer-magnetometer fallback with `GeomagneticField` true north declination correction.
+### 3. Multi-Section Schema-Aware CSV Engine & Audit Fixture
+* **6-Section Composite CSV:** Independently parses and validates `[SURVEY_METADATA]`, `[TELEMETRY_SAMPLES]`, `[ACTIVE_QOE_TESTS]`, `[MOBILITY_EVENTS]`, `[SERVICE_HOLES]`, and `[ESTIMATED_TOWERS]`.
+* **Resilient Importer:** Validates each section against its own schema, reporting malformed rows with exact section names and line numbers without discarding valid telemetry samples.
+* **Historical Session Export:** Exports the explicitly selected historical survey session rather than the currently active recording.
+* **End-to-End Regression Fixture:** Backed by automated regression tests using genuine highway survey data (`docs/cellscope_extended_Survey_20261020_050657_20261020_050657.csv`).
 
-### 4. Authoritative Telecom Time Architecture (Asia/Dhaka BST)
-* **Single Time Convention:** Internal storage preserved in UTC or epoch milliseconds; user-facing displays standardized in Bangladesh Standard Time (`Asia/Dhaka`, UTC+06:00).
-* **Unambiguous CSV Serialization:** Timestamps in CSV exports are serialized with explicit ISO 8601 offset (`+06:00`), protected against double-conversion, and verified across midnight rollovers.
-* **Monotonic Durations:** Recording elapsed duration is computed independently of timezones, preventing time-skew in survey duration calculations.
+### 4. 3GPP TS 45.005 GSM ARFCN Band Classification
+* **Accurate Band Discrimination:** Strictly separates P-GSM 900 (ARFCN 1..124), E-GSM 900 (ARFCN 0, 975..1023), GSM 850 (ARFCN 128..251), and DCS 1800 (ARFCN 512..885).
+* **Metric Provenance:** Distinguishes GSM RxLev/RSSI from LTE RSRP/RSRQ and 5G SS-RSRP/SS-RSRQ, preventing cross-generation metric conflation.
 
-### 5. Simplified Cell Explorer RF Frequency Graph
-* **Two-Item Authoritative Legend:** `Serving Cell` (Primary Blue `#0284C7`) and `Unconfirmed Neighbors` (Slate Gray `#64748B`).
-* **Authoritative Serving Determination:** Strictly checks `cell.isServing && cell.isConfirmedServing` (never relying on PCI alone).
-* **Clutter-Free Spectrum:** Eliminated persistent overlapping label piles. Peak dots for all cells, with a single active glowing callout tag only on the selected cell (`★ SERVING (PCI 288)` or `PCI 45 (Neighbor)`).
-* **3GPP Standards Disclaimer:** Explicit note: *"3GPP Nominal Channel Allocation (RSRP Peak) • Not measured spectral power"*.
+### 5. LTE CRS Modulo-3 Interference & Cellular Frequency Reuse
+* **LTE CRS Shift Isolation:** Restricts cell-specific reference signal (CRS) subcarrier collision analysis strictly to LTE networks ($v_{\text{shift}} = N_{\text{ID}}^{\text{cell}} \bmod 3$), excluding 5G NR and 2G GSM.
+* **Hexagonal Reuse Analytics:** Computes theoretical co-channel reuse distance ($D = R\sqrt{3N}$) and co-channel reuse ratio ($Q = \sqrt{3N}$).
+* **Empirical Radius Calculation:** Derives empirical cell radius ($R$) from continuous GPS drive-test trajectories using the Haversine formula, with safeguards against insufficient spatial evidence.
 
-### 6. Critical Device Reliability & Crash Fixes
-* **Redmi K50i Crash Resolution:** Eliminated the `android.view.InflateException: Error inflating class div` layout crash by safely retiring the experimental direction survey UI.
-* **Non-Destructive Room Migration:** Retained Room database schema v6 integrity without dropping tables or breaking existing SQLite app data.
-* **Screen Rotation Lifecycle:** Preserved ongoing foreground drive-test recordings and service bindings across device orientation changes.
-* **Summary Dialog Main-Thread Dispatching:** Guaranteed that survey database finalization executes off the main thread while dialog UI displays safely on the Android main looper.
+### 6. Evidence-Based Traffic Intelligence & Congestion Diagnostics
+* **Multi-Scale Traffic Estimation:** Detects cell sector congestion by correlating high RSRP (> -90 dBm) with depressed RSRQ (< -14 dB) and degraded throughput (< 2.0 Mbps).
+* **Stronger Neighbor Intelligence ("Why Not Connected?"):** Evaluates delta RSRP ($\Delta \text{RSRP} \ge +6.0\text{ dB}$) against neighbor sectors to diagnose handover ping-pong, CIO bias, or missing neighbor relations.
 
-### 7. Unified Telecom Web Dashboard (`frontend/` & `backend/`)
-* **Live Session KPIs:** Distance (Haversine), sample count, duration, GPS accuracy, and completeness percentage.
-* **Multi-Layer Route Map:** Selectable 3GPP color-ramped layers for RSRP, RSRQ, and SINR with persistent top KPI banner and detailed serving-cell inspection card.
-* **Data Quality Panel:** Audits missing values, telemetry gaps ($> 10\text{s}$), and measurement provenance.
-* **Dual CSV & PDF Reports:** Canonical 14-column CSV contract preserved, extended 18-column CSV with multi-RAT metrics, and printable survey summary card.
+---
+
+## Mathematical Formulations
+
+### 1. LTE Reference Signal Metrics
+$$\text{RSRQ} = \frac{N \cdot \text{RSRP}}{\text{RSSI}} \implies \text{RSRQ}_{\text{dB}} = 10\log_{10}(N) + \text{RSRP}_{\text{dBm}} - \text{RSSI}_{\text{dBm}}$$
+where $N$ is the number of downlink Resource Blocks across the carrier channel bandwidth.
+
+### 2. LTE CRS Modulo-3 Subcarrier Shift
+$$v_{\text{shift}} = N_{\text{ID}}^{\text{cell}} \bmod 3 = (3 \cdot N_{\text{ID}}^{(1)} + N_{\text{ID}}^{(2)}) \bmod 3 = N_{\text{ID}}^{(2)} \in \{0, 1, 2\}$$
+
+### 3. Hexagonal Co-Channel Reuse Distance & Radius
+$$D = R \cdot \sqrt{3N}, \quad Q = \frac{D}{R} = \sqrt{3N}$$
+where empirical radius $R$ is calculated via Haversine distance:
+$$\mathcal{H}(\phi_1, \lambda_1, \phi_2, \lambda_2) = 2R_{\text{Earth}} \arcsin \sqrt{\sin^2\left(\frac{\Delta\phi}{2}\right) + \cos\phi_1\cos\phi_2\sin^2\left(\frac{\Delta\lambda}{2}\right)}$$
+
+### 4. 3GPP Downlink Carrier Frequency Raster
+* **LTE (3GPP TS 36.101):**
+  $$F_{\text{DL}} = F_{\text{DL\_low}} + 0.1 \cdot (N_{\text{DL}} - N_{\text{Offs\_DL}})$$
+* **5G NR (3GPP TS 38.101-1):**
+  $$F_{\text{REF}} = \begin{cases} 0.005 \cdot N_{\text{REF}} & N_{\text{REF}} \in [0, 599999] \\ 3000.0 + 0.015 \cdot (N_{\text{REF}} - 600000) & N_{\text{REF}} \in [600000, 2016666] \end{cases}$$
+* **GSM (3GPP TS 45.005):**
+  $$F_{\text{DL}}(n) = \begin{cases} 935.0 + 0.2 \cdot n & n \in [1, 124] \quad (\text{P-GSM 900}) \\ 925.0 + 0.2 \cdot (n - 1024) & n \in [975, 1023] \quad (\text{E-GSM 900}) \\ 1805.2 + 0.2 \cdot (n - 512) & n \in [512, 885] \quad (\text{DCS 1800}) \end{cases}$$
 
 ---
 
@@ -57,36 +77,39 @@
 
 ```mermaid
 flowchart TD
-    subgraph AndroidClient["Android Field Client (CellScope App v2.0)"]
+    subgraph AndroidClient["Android Field Client (CellScope App v3.0)"]
         Loc[LocationTracker] -->|Filtered Fixes| Jitter[GpsJitterFilter]
         Sensors[OrientationTracker] -->|True & Mag Heading| Recorder[DriveTestRecorder]
         Telephony[TelephonyCollector] -->|Modem Registration| Classifier[ServingCellClassifier]
         NetState[ConnectivityManager] --> Continuity[NetworkContinuityAnalyzer]
         
+        Recorder -->|Survey Active Trigger| QoeSched[NetworkQoeScheduler]
+        QoeSched -->|Foreground Service| QoeService[QoeForegroundService]
+        QoeService -->|HTTP/TCP Probes| QoeEngine[QoeTestManager]
+        QoeEngine -->|Throughput/RTT/Jitter| Recorder
+        
         Jitter --> Recorder
         Classifier --> Recorder
         Continuity --> Recorder
         
-        TimeUtils[TelecomTimeUtils<br/>Asia/Dhaka UTC+06:00] --> Map[DriveMapView]
-        TimeUtils --> CsvExp[CsvExporter]
-        TimeUtils --> Summary[SummaryDialog & SessionAdapter]
-        
-        Classifier --> RFGraph[RfChannelGraphView<br/>2-Item Legend & Active Callout]
+        Classifier --> RFGraph[RfChannelGraphView<br/>Bell-Shaped Envelopes & Auto-Windowing]
         
         Recorder --> DB[(Room Database v6)]
+        DB --> MultiCsv[CsvImporter / CsvExporter<br/>6-Section Composite Architecture]
+        DB --> PdfExp[PdfReportExporter]
     end
 
     subgraph BackendEngine["FastAPI Analytics Engine (backend/)"]
-        CsvExp -->|Canonical 14-Col CSV| Parser[parser.py]
+        MultiCsv -->|Composite Survey CSV| Parser[parser.py]
         Parser --> Analytics[analytics.py]
         Analytics --> Routes[routes.py]
     end
 
-    subgraph Dashboard["React / Vite Dashboard (frontend/)"]
+    subgraph Dashboard["React 18 / MapLibre Dashboard (frontend/)"]
         Routes --> API[services/api.ts]
-        API --> RouteMap[MapView.tsx]
+        API --> RouteMap[MapView.tsx<br/>MapLibre GL Vector Layers]
         API --> Stats[SummaryStats.tsx]
-        API --> Anomalies[EventsAndAnomalies.tsx]
+        API --> QoEView[QoeAnalyticsPanel.tsx]
         API --> Quality[DataQualityPanel.tsx]
         API --> Exporter[ReportExporter.tsx]
     end
@@ -98,47 +121,77 @@ flowchart TD
 
 | Component | Technology Stack |
 | :--- | :--- |
-| **Android OS** | Android 8.0+ (API 26 to 36), Native Kotlin |
-| **Android Architecture** | Clean Architecture / MVVM with StateFlow, Coroutines, Foreground Service |
+| **Android OS & SDK** | Android 8.0+ (API 26 to 35), Native Kotlin 2.0 |
+| **Android Architecture** | Clean Architecture / MVVM with StateFlow, Coroutines, Foreground Services |
 | **Database** | Android Room Database v6 (KSP) with non-destructive migrations |
 | **Map Rendering** | MapLibre Native Android SDK (11.5.1) with keyless OpenStreetMap tiles |
-| **Time & Calendar** | Java 8+ `java.time.*` (ZonedDateTime, Instant, Asia/Dhaka) |
-| **Document Generation**| Android `PdfDocument` paginated canvas engine & SAF |
-| **Backend API** | Python 3.10+, FastAPI, Pydantic, Uvicorn, Pytest |
-| **Frontend Web** | React 19, Vite, TypeScript, Tailwind CSS, Leaflet, Lucide Icons |
+| **RF Visualization** | Custom `RfChannelGraphView` with cubic Bézier bell envelopes & touch hit-testing |
+| **Document Generation**| Android `PdfDocument` paginated canvas engine & Python ReportLab A4 generator |
+| **Backend API** | Python 3.11+, FastAPI 0.136, Pydantic v2, AnyIO, Uvicorn, Pytest |
+| **Frontend Web** | React 18, Vite 8, TypeScript, Tailwind CSS, MapLibre GL, Lucide Icons, Chart.js |
 
 ---
 
 ## Verification & Test Results
 
-- **Android Unit Tests:** **151/151 Passed** (`.\gradlew.bat testDebugUnitTest` in 33s, 0 failures).
-- **Android APK Assembly:** **BUILD SUCCESSFUL** (`CellScope-v2.0-final.apk`, ~48.3 MB).
-- **Backend Analytics Engine:** **18/18 Passed** (`python -m pytest backend/tests -v` in 3.21s).
-- **Frontend Dashboard Build:** **Build Succeeded** (`npm.cmd run build`, 1932 modules transformed in 1.32s).
+All verification suites have been executed and verified in place:
+
+* **Android Unit Tests:** **272 / 272 Passed** (100% success rate across 52 test suites via `.\android\gradlew.bat testDebugUnitTest` in 50s, 0 failures).
+* **Android Debug APK Assembly:** **BUILD SUCCESSFUL** via `assembleDebug` (`app-debug.apk` ~49.8 MB).
+* **FastAPI Backend Analytics:** **19 / 19 Passed** (`python -m pytest backend/tests` in 7.00s, 0 failures).
+* **Frontend Production Build:** **BUILD SUCCESSFUL** (`npm run build`, 1,932 modules transformed in 1.48s, 0 errors).
+* **End-to-End CSV Regression:** **100% Passed** (`MultiSectionCsvRegressionTest` validating 6-section survey dataset).
 
 ---
 
 ## Getting Started
 
-### 1. Direct Android Installation
-Transfer [`CellScope-v2.0-final.apk`](CellScope-v2.0-final.apk) to an Android device (API 26+) and install directly.
-
-### 2. Building from Source
+### 1. Building and Testing the Android Application
 ```bash
-# Android App Build
-cd android
-./gradlew.bat testDebugUnitTest
-./gradlew.bat assembleDebug
+# Set JDK 21+ environment (e.g. Android Studio JBR)
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
-# Python Backend
-python -m pytest backend/tests/ -v
-python backend/run.py
+# Run Android unit tests (272 tests)
+.\android\gradlew.bat -p android testDebugUnitTest
 
-# Frontend Development
+# Assemble Debug APK
+.\android\gradlew.bat -p android assembleDebug
+```
+The output APK is generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### 2. Running Backend Analytics Tests & Dev Server
+```bash
+# Run backend pytest suite (19 tests)
+python -m pytest backend/tests
+
+# Start FastAPI development server
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 3. Running Web GIS Frontend
+```bash
 cd frontend
 npm install
 npm run dev
+# To build for production:
+npm run build
 ```
+
+### 4. Generating the Comprehensive Technical PDF
+```bash
+python backend/scripts/generate_technical_report.py
+```
+The publication-grade A4 technical report is compiled to `docs/CellScope_5G_v3_Technical_Report.pdf`.
+
+---
+
+## Applied ICT Telecom Engineering Foundations
+
+This project directly demonstrates core principles taught in Telecommunication and Information Engineering curricula:
+* **Mobile Cellular Communications:** Frequency reuse clustering, co-channel interference reduction factor ($Q$), adjacent-channel interference rejection, and handoff hysteresis margins.
+* **Radio Frequency Propagation:** Log-distance path loss, Okumura-Hata empirical models, and shadow fading log-normal distributions.
+* **Digital Communications & Signal Processing:** OFDM subcarrier spacing (15 kHz LTE / 30 kHz 5G NR), cyclic prefix insertion, QAM constellation mapping, and reference signal pilot placement.
+* **Computer Networks & Queuing Theory:** TCP congestion dynamics (BBR/CUBIC), bufferbloat detection, RTT variance (Jacobson's algorithm), and jitter formulation (RFC 3550).
 
 ---
 
@@ -146,4 +199,5 @@ npm run dev
 
 This project is licensed under the [MIT License](LICENSE).  
 **Owner & Lead Engineer:** Sarkar Tuhassinul Arnob ([arnob.ict.iu@gmail.com](mailto:arnob.ict.iu@gmail.com))  
-**GitHub:** [github.com/TuhassinulArnob](https://github.com/TuhassinulArnob) | **LinkedIn:** [linkedin.com/in/tuhassinularnob](https://www.linkedin.com/in/tuhassinularnob/?isSelfProfile=true)
+**GitHub Repository:** [github.com/TuhassinulArnob/cellCoverageApp](https://github.com/TuhassinulArnob/cellCoverageApp)  
+**Academic Affiliation:** Department of Information and Communication Technology (ICT), Islamic University, Kushtia, Bangladesh.

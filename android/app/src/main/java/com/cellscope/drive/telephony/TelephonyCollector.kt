@@ -79,28 +79,68 @@ class TelephonyCollector(
     @Volatile
     private var hasSeenNonZeroRssnr: Boolean = false
 
+    private fun getActiveTelephonyManager(): TelephonyManager? {
+        if (telephonyManager == null) return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                val subId = android.telephony.SubscriptionManager.getDefaultDataSubscriptionId()
+                if (subId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    return telephonyManager.createForSubscriptionId(subId)
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return telephonyManager
+    }
+
     fun getOperatorIdentity(): OperatorIdentity {
         val serving = latestMetrics
+        val activeTm = getActiveTelephonyManager() ?: telephonyManager
+        val now = System.currentTimeMillis()
+        val isStale = (now - serving.timestampMs > 15000L) && serving.timestampMs > 0L
+        val simSlotIndex = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            try {
+                val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
+                val subId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    android.telephony.SubscriptionManager.getDefaultDataSubscriptionId()
+                } else null
+                if (subId != null && subId != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    sm?.getActiveSubscriptionInfo(subId)?.simSlotIndex
+                } else null
+            } catch (_: Exception) { null }
+        } else null
+
         return OperatorIdentity(
-            simOperatorName = telephonyManager?.simOperatorName?.takeIf { it.isNotBlank() },
-            simOperatorNumeric = telephonyManager?.simOperator?.takeIf { it.isNotBlank() },
-            simCountryIso = telephonyManager?.simCountryIso?.takeIf { it.isNotBlank() },
-            networkOperatorName = telephonyManager?.networkOperatorName?.takeIf { it.isNotBlank() },
-            networkOperatorNumeric = telephonyManager?.networkOperator?.takeIf { it.isNotBlank() },
-            networkCountryIso = telephonyManager?.networkCountryIso?.takeIf { it.isNotBlank() },
+            simOperatorName = activeTm?.simOperatorName?.takeIf { it.isNotBlank() },
+            simOperatorNumeric = activeTm?.simOperator?.takeIf { it.isNotBlank() },
+            simCountryIso = activeTm?.simCountryIso?.takeIf { it.isNotBlank() },
+            simSlotIndex = simSlotIndex,
+            networkOperatorName = activeTm?.networkOperatorName?.takeIf { it.isNotBlank() },
+            networkOperatorNumeric = activeTm?.networkOperator?.takeIf { it.isNotBlank() },
+            networkCountryIso = activeTm?.networkCountryIso?.takeIf { it.isNotBlank() },
+            servingOperatorAlpha = serving.operatorAlpha,
+            servingOperatorNumeric = serving.operatorNumeric,
             dataNetworkType = getNetworkTypeString(),
-            isRoaming = telephonyManager?.isNetworkRoaming ?: false,
+            isRoaming = activeTm?.isNetworkRoaming ?: false,
             servingPci = serving.servingPci,
             tac = serving.tac,
             eci = serving.eci,
             earfcn = serving.earfcn,
-            timestampMs = serving.timestampMs
+            timestampMs = serving.timestampMs,
+            serviceState = serving.serviceState ?: "IN_SERVICE",
+            dataConnectionState = serving.dataState ?: "CONNECTED",
+            dataSubscriptionId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try { android.telephony.SubscriptionManager.getDefaultDataSubscriptionId() } catch (_: Exception) { null }
+            } else null,
+            isStale = isStale,
+            activeRat = serving.servingRat ?: serving.networkGen?.code ?: "LTE"
         )
     }
 
     @SuppressLint("MissingPermission")
     fun sampleCurrentMetrics(): LteMetrics {
-        if (telephonyManager == null) {
+        val activeTm = getActiveTelephonyManager() ?: telephonyManager
+        if (activeTm == null) {
             val none = LteMetrics(
                 networkType = "NO_TELEPHONY",
                 serviceState = "OUT_OF_SERVICE",
@@ -111,21 +151,21 @@ class TelephonyCollector(
             return none
         }
 
-        val operatorName = telephonyManager.networkOperatorName.takeIf { it.isNotBlank() }
-        val operatorNumeric = telephonyManager.networkOperator.takeIf { it.isNotBlank() }
+        val operatorName = activeTm.networkOperatorName.takeIf { it.isNotBlank() }
+        val operatorNumeric = activeTm.networkOperator.takeIf { it.isNotBlank() }
         val netType = getNetworkTypeString()
         val now = System.currentTimeMillis()
 
         // Read distinct cellular data and voice bearer states
         val dataNetInt = try {
-            telephonyManager.dataNetworkType
+            activeTm.dataNetworkType
         } catch (_: Exception) {
             0
         }
 
         val voiceNetInt = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                telephonyManager.voiceNetworkType
+                activeTm.voiceNetworkType
             } else {
                 0
             }
@@ -134,28 +174,28 @@ class TelephonyCollector(
         }
 
         val rawServiceState = try {
-            telephonyManager.serviceState?.state
+            activeTm.serviceState?.state
         } catch (_: Exception) {
             null
         }
         val serviceStateStr = NetworkGeneration.getServiceStateName(rawServiceState)
 
         val rawDataState = try {
-            telephonyManager.dataState
+            activeTm.dataState
         } catch (_: Exception) {
             null
         }
         val dataStateStr = NetworkGeneration.getDataStateName(rawDataState)
 
         val rawCallState = try {
-            telephonyManager.callState
+            activeTm.callState
         } catch (_: Exception) {
             null
         }
         val callStateStr = NetworkGeneration.getCallStateName(rawCallState)
 
         try {
-            val cellInfoList: List<CellInfo>? = telephonyManager.allCellInfo
+            val cellInfoList: List<CellInfo>? = activeTm.allCellInfo
 
             if (cellInfoList.isNullOrEmpty()) {
                 val detailedDataTech = NetworkGeneration.getDetailedTechName(dataNetInt)
@@ -271,7 +311,19 @@ class TelephonyCollector(
                 networkGen = normalizedGen,
                 serviceState = serviceStateStr,
                 dataState = dataStateStr,
-                callState = callStateStr
+                callState = callStateStr,
+                servingRat = primaryServingCell?.servingRat ?: when (normalizedGen) {
+                    NetworkGeneration.GEN_5G -> "5G"
+                    NetworkGeneration.GEN_4G -> "4G"
+                    NetworkGeneration.GEN_3G -> "3G"
+                    NetworkGeneration.GEN_2G -> "2G"
+                    else -> null
+                },
+                channelNumber = primaryServingCell?.channelNumber,
+                channelType = primaryServingCell?.channelType,
+                primarySignalDbm = primaryServingCell?.primarySignalDbm,
+                signalMetricType = primaryServingCell?.signalMetricType,
+                secondarySignalDb = primaryServingCell?.secondarySignalDb
             )
 
             latestMetrics = metrics
@@ -297,6 +349,32 @@ class TelephonyCollector(
         latestMetrics = empty
         onMetricsUpdated(empty)
         return empty
+    }
+
+    private fun resolveCandidateOperator(
+        isRegistered: Boolean,
+        cellPlmn: String?,
+        cellAlpha: String?,
+        simOperatorNumeric: String?,
+        simOperatorName: String?
+    ): Pair<String?, String?> {
+        return if (isRegistered) {
+            val plmn = cellPlmn ?: simOperatorNumeric
+            val alpha = if (plmn != null) {
+                BangladeshMccMnc.resolveOperatorName(plmn, cellAlpha ?: simOperatorName)
+            } else {
+                cellAlpha ?: simOperatorName
+            }
+            Pair(plmn, alpha)
+        } else {
+            // Neighbor cell: Strictly NEVER inherit active SIM operator identity!
+            if (cellPlmn != null) {
+                val alpha = BangladeshMccMnc.resolveOperatorName(cellPlmn, cellAlpha)
+                Pair(cellPlmn, alpha)
+            } else {
+                Pair(null, cellAlpha ?: "Unknown (Unbroadcast PLMN)")
+            }
+        }
     }
 
     private fun parseCellCandidate(
@@ -334,6 +412,30 @@ class TelephonyCollector(
                     signal.rssi.takeIf { it in -120..-40 }
                 } else null
 
+                // Extract cell-specific PLMN and operator identity
+                val cellMcc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    identity.mccString
+                } else {
+                    @Suppress("DEPRECATION") identity.mcc.takeIf { it != Integer.MAX_VALUE && it > 0 }?.toString()
+                }
+                val cellMnc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    identity.mncString
+                } else {
+                    @Suppress("DEPRECATION") identity.mnc.takeIf { it != Integer.MAX_VALUE && it >= 0 }?.toString()
+                }
+                val cellPlmn = if (!cellMcc.isNullOrBlank() && !cellMnc.isNullOrBlank()) "$cellMcc$cellMnc" else null
+                val cellAlpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    identity.operatorAlphaLong?.toString()?.takeIf { it.isNotBlank() }
+                        ?: identity.operatorAlphaShort?.toString()?.takeIf { it.isNotBlank() }
+                } else null
+                val (effectivePlmn, effectiveAlpha) = resolveCandidateOperator(
+                    isRegistered = info.isRegistered,
+                    cellPlmn = cellPlmn,
+                    cellAlpha = cellAlpha,
+                    simOperatorNumeric = operatorNumeric,
+                    simOperatorName = operatorName
+                )
+
                 // RSSNR in LTE is given in tenths of a dB (-200..300 = -20.0 to 30.0 dB)
                 val sinr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val rawRssnr = signal.rssnr
@@ -365,9 +467,15 @@ class TelephonyCollector(
                     isRegistered = info.isRegistered,
                     connectionStatus = rawConnStatus,
                     networkType = "LTE",
-                    operatorAlpha = operatorName,
-                    operatorNumeric = operatorNumeric,
-                    timestampMs = timestampMs
+                    operatorAlpha = effectiveAlpha,
+                    operatorNumeric = effectivePlmn,
+                    timestampMs = timestampMs,
+                    servingRat = "4G",
+                    channelNumber = earfcn,
+                    channelType = "EARFCN",
+                    primarySignalDbm = rsrp,
+                    signalMetricType = "LTE_RSRP",
+                    secondarySignalDb = rsrq?.toDouble() ?: sinr
                 )
             }
 
@@ -385,6 +493,21 @@ class TelephonyCollector(
                 val csiRsrq = signal?.csiRsrq?.takeIf { it in -43..20 }
                 val csiSinr = signal?.csiSinr?.takeIf { it in -23..40 }?.toDouble()
 
+                val cellMcc = identity?.mccString
+                val cellMnc = identity?.mncString
+                val cellPlmn = if (!cellMcc.isNullOrBlank() && !cellMnc.isNullOrBlank()) "$cellMcc$cellMnc" else null
+                val cellAlpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    identity?.operatorAlphaLong?.toString()?.takeIf { it.isNotBlank() }
+                        ?: identity?.operatorAlphaShort?.toString()?.takeIf { it.isNotBlank() }
+                } else null
+                val (effectivePlmn, effectiveAlpha) = resolveCandidateOperator(
+                    isRegistered = info.isRegistered,
+                    cellPlmn = cellPlmn,
+                    cellAlpha = cellAlpha,
+                    simOperatorNumeric = operatorNumeric,
+                    simOperatorName = operatorName
+                )
+
                 return RawCellCandidate(
                     pci = pci,
                     tac = tac,
@@ -399,39 +522,129 @@ class TelephonyCollector(
                     isRegistered = info.isRegistered,
                     connectionStatus = rawConnStatus,
                     networkType = "5G_NR",
-                    operatorAlpha = operatorName,
-                    operatorNumeric = operatorNumeric,
-                    timestampMs = timestampMs
+                    operatorAlpha = effectiveAlpha,
+                    operatorNumeric = effectivePlmn,
+                    timestampMs = timestampMs,
+                    servingRat = "5G",
+                    channelNumber = nrArfcn,
+                    channelType = "NR_ARFCN",
+                    primarySignalDbm = ssRsrp ?: csiRsrp,
+                    signalMetricType = "NR_SS_RSRP",
+                    secondarySignalDb = ssRsrq?.toDouble() ?: csiRsrq?.toDouble()
                 )
             }
 
             info is CellInfoWcdma -> {
                 val sig = info.cellSignalStrength
                 val rscp = sig.dbm.takeIf { it in -120..-24 }
+                val identity = info.cellIdentity
+                val uarfcn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    identity.uarfcn.takeIf { it in 0..16383 }
+                } else null
+                val psc = identity.psc.takeIf { it in 0..511 }
+                val cid = identity.cid.takeIf { it in 1..268435455 }
+                val lac = identity.lac.takeIf { it in 1..65535 }
+
+                val cellMcc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    identity.mccString
+                } else {
+                    @Suppress("DEPRECATION") identity.mcc.takeIf { it != Integer.MAX_VALUE && it > 0 }?.toString()
+                }
+                val cellMnc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    identity.mncString
+                } else {
+                    @Suppress("DEPRECATION") identity.mnc.takeIf { it != Integer.MAX_VALUE && it >= 0 }?.toString()
+                }
+                val cellPlmn = if (!cellMcc.isNullOrBlank() && !cellMnc.isNullOrBlank()) "$cellMcc$cellMnc" else null
+                val cellAlpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    identity.operatorAlphaLong?.toString()?.takeIf { it.isNotBlank() }
+                        ?: identity.operatorAlphaShort?.toString()?.takeIf { it.isNotBlank() }
+                } else null
+                val (effectivePlmn, effectiveAlpha) = resolveCandidateOperator(
+                    isRegistered = info.isRegistered,
+                    cellPlmn = cellPlmn,
+                    cellAlpha = cellAlpha,
+                    simOperatorNumeric = operatorNumeric,
+                    simOperatorName = operatorName
+                )
+
                 return RawCellCandidate(
-                    pci = info.cellIdentity.psc.takeIf { it in 0..511 },
-                    rsrpDbm = rscp,
+                    pci = psc,
+                    tac = lac,
+                    eci = cid,
+                    earfcn = null,
+                    rsrpDbm = null, // Strictly null: 3G uses RSCP, not RSRP!
+                    rssiDbm = rscp,
                     isRegistered = info.isRegistered,
                     connectionStatus = rawConnStatus,
                     networkType = "3G_WCDMA",
-                    operatorAlpha = operatorName,
-                    operatorNumeric = operatorNumeric,
-                    timestampMs = timestampMs
+                    operatorAlpha = effectiveAlpha,
+                    operatorNumeric = effectivePlmn,
+                    timestampMs = timestampMs,
+                    servingRat = "3G",
+                    channelNumber = uarfcn,
+                    channelType = "UARFCN",
+                    primarySignalDbm = rscp,
+                    signalMetricType = "WCDMA_RSCP",
+                    secondarySignalDb = null
                 )
             }
 
             info is CellInfoGsm -> {
                 val sig = info.cellSignalStrength
-                val dbm = sig.dbm.takeIf { it in -113..-51 }
+                val dbm = sig.dbm.takeIf { it in -120..-40 }
+                val identity = info.cellIdentity
+                val arfcn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    identity.arfcn.takeIf { it in 0..1023 }
+                } else null
+                val bsic = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    identity.bsic.takeIf { it in 0..63 }
+                } else null
+                val cid = identity.cid.takeIf { it in 1..65535 }
+                val lac = identity.lac.takeIf { it in 1..65535 }
+
+                val cellMcc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    identity.mccString
+                } else {
+                    @Suppress("DEPRECATION") identity.mcc.takeIf { it != Integer.MAX_VALUE && it > 0 }?.toString()
+                }
+                val cellMnc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    identity.mncString
+                } else {
+                    @Suppress("DEPRECATION") identity.mnc.takeIf { it != Integer.MAX_VALUE && it >= 0 }?.toString()
+                }
+                val cellPlmn = if (!cellMcc.isNullOrBlank() && !cellMnc.isNullOrBlank()) "$cellMcc$cellMnc" else null
+                val cellAlpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    identity.operatorAlphaLong?.toString()?.takeIf { it.isNotBlank() }
+                        ?: identity.operatorAlphaShort?.toString()?.takeIf { it.isNotBlank() }
+                } else null
+                val (effectivePlmn, effectiveAlpha) = resolveCandidateOperator(
+                    isRegistered = info.isRegistered,
+                    cellPlmn = cellPlmn,
+                    cellAlpha = cellAlpha,
+                    simOperatorNumeric = operatorNumeric,
+                    simOperatorName = operatorName
+                )
+
                 return RawCellCandidate(
-                    pci = null,
-                    rsrpDbm = dbm,
+                    pci = bsic,
+                    tac = lac,
+                    eci = cid,
+                    earfcn = null,
+                    rsrpDbm = null, // Strictly null: GSM uses RSSI, not RSRP!
+                    rssiDbm = dbm,
                     isRegistered = info.isRegistered,
                     connectionStatus = rawConnStatus,
                     networkType = "2G_GSM",
-                    operatorAlpha = operatorName,
-                    operatorNumeric = operatorNumeric,
-                    timestampMs = timestampMs
+                    operatorAlpha = effectiveAlpha,
+                    operatorNumeric = effectivePlmn,
+                    timestampMs = timestampMs,
+                    servingRat = "2G",
+                    channelNumber = arfcn,
+                    channelType = "ARFCN",
+                    primarySignalDbm = dbm,
+                    signalMetricType = "GSM_RSSI",
+                    secondarySignalDb = null
                 )
             }
 

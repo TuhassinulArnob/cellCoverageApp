@@ -181,4 +181,106 @@ class RadioQualityEngineTest {
             report.interferenceEstimate.interpretationSummary.contains("Measured impairment")
         )
     }
+
+    @Test
+    fun testMultiRatIsolationAndGsmRssiDoesNotCorruptLteRsrp() {
+        val lteSample1 = createSample(1, rsrp = -90, rsrq = -11, sinr = 10.0)
+        val lteSample2 = createSample(2, rsrp = -100, rsrq = -14, sinr = 5.0)
+
+        // 2G GSM sample with -44 dBm RSSI (typical near-BTS signal)
+        val gsmSample = LteMeasurementEntity(
+            id = 3L,
+            sessionId = 1L,
+            timestampIso = "2026-10-17T12:00:03.000Z",
+            timestampMs = 3000L,
+            latitude = 23.810,
+            longitude = 90.410,
+            altitudeM = 10.0,
+            accuracyM = 3f,
+            speedKmh = 10f,
+            networkType = "2G_GSM",
+            operatorAlpha = "Robi",
+            operatorNumeric = "47002",
+            servingPci = null,
+            tac = 5001,
+            earfcn = 60,
+            bandwidthKhz = null,
+            rsrpDbm = null,
+            rsrqDb = null,
+            rssiDbm = -44,
+            sinrDb = null,
+            cqi = null,
+            timingAdvance = null,
+            isServing = true,
+            handoverTrigger = 0,
+            servingRat = "2G",
+            channelNumber = 60,
+            channelType = "ARFCN",
+            primarySignalDbm = -44,
+            signalMetricType = "GSM_RSSI"
+        )
+
+        val report = RadioQualityEngine.evaluateSessionQuality(listOf(lteSample1, lteSample2, gsmSample))
+
+        // LTE RSRP distribution should only have the 2 LTE samples: (-90 + -100)/2 = -95.0 dBm
+        // NOT (-90 + -100 + -44)/3 = -78.0 dBm!
+        assertEquals("LTE RSRP count must be strictly 2", 2, report.rsrpDistribution.buckets.sumOf { it.count })
+        assertEquals(-95.0, report.rsrpDistribution.mean!!, 0.1)
+
+        // GSM RSSI distribution must be populated
+        assertNotNull("GSM RSSI distribution must be present", report.gsmRssiDistribution)
+        assertEquals(-44.0, report.gsmRssiDistribution!!.mean!!, 0.1)
+
+        // GSM -44 dBm must NOT be flagged as baseband clamping
+        assertEquals(0, report.signalAudit?.suspectClampCount ?: 0)
+    }
+
+    @Test
+    fun testBasebandModemClampAuditAndValidatedRsrp() {
+        val normal1 = createSample(1, rsrp = -90, rsrq = -10, sinr = 12.0)
+        val normal2 = createSample(2, rsrp = -100, rsrq = -12, sinr = 8.0)
+        // Clamped sample: RSRP = -44, RSRQ = -3, RSSI <= -100
+        val clamped = LteMeasurementEntity(
+            id = 3L,
+            sessionId = 1L,
+            timestampIso = "2026-10-17T12:00:02.000Z",
+            timestampMs = 2000L,
+            latitude = 23.810,
+            longitude = 90.410,
+            altitudeM = 10.0,
+            accuracyM = 3f,
+            speedKmh = 15f,
+            networkType = "LTE",
+            operatorAlpha = "Grameenphone",
+            operatorNumeric = "47001",
+            servingPci = 288,
+            tac = 18452,
+            earfcn = 1600,
+            bandwidthKhz = 20000,
+            rsrpDbm = -44,
+            rsrqDb = -3,
+            rssiDbm = -105,
+            sinrDb = null,
+            cqi = 15,
+            timingAdvance = 1,
+            isServing = true,
+            handoverTrigger = 0
+        )
+
+        val report = RadioQualityEngine.evaluateSessionQuality(listOf(normal1, normal2, clamped))
+        val audit = report.signalAudit
+        assertNotNull("Signal audit must be computed", audit)
+        assertEquals(3, audit!!.totalSamples)
+        assertEquals(1, audit.suspectClampCount)
+        assertEquals(33.3, audit.suspectClampPercent, 0.1)
+
+        // Raw mean = (-90 + -100 + -44) / 3 = -78.0 dBm
+        assertEquals(-78.0, audit.rawMeanRsrp!!, 0.1)
+        // Validated mean excludes the clamp = (-90 + -100) / 2 = -95.0 dBm
+        assertEquals(-95.0, audit.validatedMeanRsrp!!, 0.1)
+        assertEquals(-95.0, audit.validatedMedianRsrp!!, 0.1)
+        assertTrue(audit.calibrationStatus.contains("No laboratory calibration offset applied"))
+        assertEquals(1, audit.exclusionReasons.size)
+        assertTrue(audit.exclusionReasons[0].contains("3GPP TS 36.133 index 97"))
+    }
 }

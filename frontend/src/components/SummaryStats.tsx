@@ -14,6 +14,7 @@ import {
   Target,
   ShieldCheck,
   Layers,
+  Clock,
 } from 'lucide-react';
 
 interface SummaryStatsProps {
@@ -46,7 +47,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
           />
           <div
             style={{ width: `${goodPct}%` }}
-            className="bg-[#0ea5e9] transition-all"
+            className="bg-[#84cc16] transition-all"
             title={`Good: ${dist.good} (${goodPct}%)`}
           />
           <div
@@ -68,7 +69,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
             <span className="text-slate-400 text-[10px]">Excellent</span>
           </div>
           <div className="bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
-            <span className="text-[#0ea5e9] block font-bold">{goodPct}%</span>
+            <span className="text-[#84cc16] block font-bold">{goodPct}%</span>
             <span className="text-slate-400 text-[10px]">Good</span>
           </div>
           <div className="bg-slate-800/60 p-1.5 rounded border border-slate-700/50">
@@ -84,10 +85,17 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
     );
   };
 
+  const formatDuration = (sec: number | null | undefined) => {
+    if (!sec || sec <= 0) return '—';
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return `${m}m ${s}s`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Session KPIs Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
         <KpiCard
           title="Mean RSRP"
           value={summary.mean_rsrp_dbm}
@@ -120,6 +128,13 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
             type: summary.mean_cinr_db ? (summary.mean_cinr_db >= 20 ? 'excellent' : summary.mean_cinr_db >= 13 ? 'good' : summary.mean_cinr_db >= 0 ? 'fair' : 'poor') : 'neutral',
           }}
           subtitle={summary.max_cinr_db ? `Max: ${summary.max_cinr_db} dB` : undefined}
+        />
+        <KpiCard
+          title="Duration"
+          value={formatDuration(summary.duration_sec)}
+          unit=""
+          icon={Clock}
+          subtitle={summary.duration_sec ? `${Math.round(summary.duration_sec)} total sec` : 'Estimated'}
         />
         <KpiCard
           title="Route Distance"

@@ -25,10 +25,25 @@ data class ObservedCell(
     val csiRsrqDb: Int? = null,          // CSI-RSRQ (5G NR)
     val csiSinrDb: Double? = null,       // CSI-SINR (5G NR)
     val nrState: String? = null,         // "SA", "NSA", "NOT_CONNECTED", "UNSUPPORTED"
-    val availabilityState: String = "AVAILABLE" // AVAILABLE, TEMPORARILY_UNAVAILABLE, UNSUPPORTED, PERMISSION_DENIED, STALE
+    val availabilityState: String = "AVAILABLE", // AVAILABLE, TEMPORARILY_UNAVAILABLE, UNSUPPORTED, PERMISSION_DENIED, STALE
+    val servingRat: String? = null,
+    val channelNumber: Int? = null,
+    val channelType: String? = null,
+    val primarySignalDbm: Int? = null,
+    val signalMetricType: String? = null,
+    val secondarySignalDb: Double? = null
 ) {
     val is5gNr: Boolean
-        get() = networkType == "5G_NR"
+        get() = servingRat == "5G" || networkType == "5G_NR" || networkType == "5G"
+
+    val isGsm: Boolean
+        get() = servingRat == "2G" || networkType.contains("GSM", ignoreCase = true) || networkType == "2G"
+
+    val isWcdma: Boolean
+        get() = servingRat == "3G" || networkType.contains("WCDMA", ignoreCase = true) || networkType == "3G" || networkType == "UMTS"
+
+    val isLte: Boolean
+        get() = servingRat == "4G" || networkType.equals("LTE", ignoreCase = true) || networkType == "4G"
 
     val isConfirmedServing: Boolean
         get() = servingStatus == ServingStatus.PRIMARY_SERVING || servingStatus == ServingStatus.SECONDARY_SERVING

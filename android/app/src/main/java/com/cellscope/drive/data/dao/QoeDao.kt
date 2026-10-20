@@ -11,6 +11,9 @@ interface QoeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQoeTest(test: ActiveQoeTestEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQoeTests(tests: List<ActiveQoeTestEntity>)
+
     @Query("SELECT * FROM active_qoe_tests WHERE sessionId = :sessionId ORDER BY timestampMs ASC")
     suspend fun getTestsForSession(sessionId: Long): List<ActiveQoeTestEntity>
 

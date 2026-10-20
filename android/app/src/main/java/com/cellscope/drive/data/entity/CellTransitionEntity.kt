@@ -31,7 +31,13 @@ data class CellTransitionEntity(
     val toRsrp: Int?,
     val fromTac: Int? = null,
     val toTac: Int? = null,
-    val eventType: String, // CONFIRMED_HANDOVER, OBSERVED_TRANSITION, POSSIBLE_HANDOVER, CELL_RESELECTION, SIGNAL_LOSS
+    val eventType: String, // CONFIRMED_HANDOVER, OBSERVED_TRANSITION, POSSIBLE_HANDOVER, CELL_RESELECTION, SIGNAL_LOSS, INTER_RAT, INTER_FREQ, INTRA_LTE
     val confidenceScore: Float, // 0.0f .. 1.0f
-    val details: String
+    val details: String,
+    val fromRat: String? = null,
+    val toRat: String? = null,
+    val fromChannel: Int? = null,
+    val toChannel: Int? = null,
+    val fromCellId: Int? = null,
+    val toCellId: Int? = null
 )

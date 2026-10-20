@@ -103,6 +103,40 @@ def clean_numeric_value(val: Any) -> Optional[float]:
         return None
 
 
+def extract_telemetry_lines(raw_text: str) -> str:
+    """
+    Extracts the telemetry section lines from a single-header or multi-section CSV file.
+    Stops before subsequent non-telemetry sections (e.g. QoE, Transitions, Continuity).
+    """
+    lines = raw_text.splitlines()
+    telemetry_lines = []
+    in_telemetry = False
+
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            lower = s.lower()
+            if "telemetry" in lower:
+                in_telemetry = True
+                continue
+            elif any(k in lower for k in ["active qoe", "cell transition", "network continuity", "service hole", "call reliability"]):
+                if in_telemetry:
+                    break
+                continue
+            else:
+                continue
+        # Direct section header check
+        if s.startswith("test_id,") or "Event Type,From RAT" in s or "From Generation,To Generation" in s:
+            if in_telemetry:
+                break
+        in_telemetry = True
+        telemetry_lines.append(line)
+
+    return "\n".join(telemetry_lines)
+
+
 def parse_csv_to_dataframe(
     content_bytes: Optional[bytes] = None,
     file_path: Optional[str] = None
@@ -110,13 +144,22 @@ def parse_csv_to_dataframe(
     """
     Parse a CSV file (either from raw bytes or file path) and normalize
     headers to canonical field names where possible.
+    Section-aware: safely parses multi-section extended CellScope v3.0 exports as well as legacy single-header files.
     """
     if content_bytes is not None:
-        df = pd.read_csv(io.BytesIO(content_bytes), na_values=["-", "--", "NA", "null"])
+        raw_text = content_bytes.decode("utf-8", errors="replace")
     elif file_path is not None:
-        df = pd.read_csv(file_path, na_values=["-", "--", "NA", "null"])
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            raw_text = f.read()
     else:
         raise ValueError("Either content_bytes or file_path must be provided.")
+
+    cleaned_csv = extract_telemetry_lines(raw_text)
+    df = pd.read_csv(
+        io.StringIO(cleaned_csv),
+        na_values=["-", "--", "NA", "null"],
+        on_bad_lines="skip"
+    )
 
     mapping, unmapped = detect_column_mapping(list(df.columns))
     return df, mapping, unmapped
