@@ -24,6 +24,10 @@ export interface MeasurementPoint {
   operator?: string | null;
   accuracy_m?: number | null;
   heading_deg?: number | null;
+  timing_advance?: number | null;
+  cqi?: number | null;
+  eci?: number | null;
+  altitude_m?: number | null;
   anomaly_label?: string | null;
 }
 
@@ -194,4 +198,36 @@ export interface AvailableDatasetInfo {
   description: string;
 }
 
-export type ActiveMetric = 'rsrp' | 'rsrq' | 'cinr';
+export type ActiveMetric = 'rsrp' | 'rsrq' | 'cinr' | 'pci' | 'ta' | 'tech' | 'speed';
+
+export interface FilterState {
+  servingCellId: number | null;
+  networkGen: string | null;
+  operator: string | null;
+  bandEarfcn: number | null;
+  rsrpClass: string | null;
+  rsrqClass: string | null;
+  minCinr: number | null;
+  handoversOnly: boolean;
+  weakZonesOnly: boolean;
+}
+
+export interface MapOverlayState {
+  routeTrack: boolean;
+  weakZones: boolean;
+  handovers: boolean;
+  cellSites: boolean;
+  taUncertainty: boolean;
+}
+
+export interface EstimatedCellSite {
+  pci: number;
+  latitude: number;
+  longitude: number;
+  sampleCount: number;
+  meanRsrp: number;
+  maxRsrp: number;
+  earfcn: number | null;
+  networkGen: string;
+  uncertaintyRadiusMeters: number;
+}

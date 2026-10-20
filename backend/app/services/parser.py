@@ -41,13 +41,13 @@ CANONICAL_FIELD_PATTERNS = {
         r"^tac\s*$", r"^tracking_area_code\s*$"
     ],
     "earfcn": [
-        r"^earfcn\s*$", r"^arfcn\s*$", r"^channel\s*$", r"^nr_arfcn\s*$"
+        r"^earfcn\s*$", r"^arfcn\s*$", r"^channel\s*$", r"^nr_arfcn\s*$", r"^channel\s+number\s*$"
     ],
     "rssi": [
         r"^rssi\s*\(\s*dbm\s*\)\s*$", r"^rssi\s*$", r"^serving_cell_rssi\s*$"
     ],
     "network_type": [
-        r"^network\s+type\s*$", r"^network_type\s*$", r"^tech\s*$", r"^rat\s*$", r"^network_gen\s*$"
+        r"^network\s+type\s*$", r"^network_type\s*$", r"^tech\s*$", r"^rat\s*$", r"^network_gen\s*$", r"^serving\s+rat\s*$"
     ],
     "operator": [
         r"^operator\s*$", r"^carrier\s*$", r"^network_operator\s*$", r"^operator_alpha\s*$"
@@ -57,6 +57,18 @@ CANONICAL_FIELD_PATTERNS = {
     ],
     "heading": [
         r"^heading\s*\(\s*deg\s*\)\s*$", r"^heading\s*$", r"^bearing\s*$", r"^azimuth\s*$"
+    ],
+    "timing_advance": [
+        r"^timing\s+advance\s*$", r"^timing_advance\s*$", r"^ta\s*$"
+    ],
+    "cqi": [
+        r"^cqi\s*$", r"^channel_quality_indicator\s*$"
+    ],
+    "eci": [
+        r"^eci\s*$", r"^cell_identity\s*$", r"^ci\s*$", r"^nci\s*$"
+    ],
+    "altitude": [
+        r"^altitude\s*\(\s*m\s*\)\s*$", r"^altitude\s*$", r"^alt\s*$"
     ],
 }
 

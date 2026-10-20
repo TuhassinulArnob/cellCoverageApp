@@ -95,6 +95,10 @@ def process_and_summarize_dataset(
     op_col = mapping.get("operator")
     acc_col = mapping.get("accuracy")
     heading_col = mapping.get("heading")
+    ta_col = mapping.get("timing_advance")
+    cqi_col = mapping.get("cqi")
+    eci_col = mapping.get("eci")
+    alt_col = mapping.get("altitude")
 
     has_gps = (lat_col is not None and lon_col is not None)
     if not has_gps:
@@ -174,11 +178,15 @@ def process_and_summarize_dataset(
         if speed_val is not None:
             speed_vals.append(speed_val)
 
-        # Accuracy & Heading
+        # Accuracy, Altitude & Heading
         acc_val = clean_numeric_value(row[acc_col]) if acc_col else None
         if acc_val is not None:
             accuracy_vals.append(acc_val)
         heading_val = clean_numeric_value(row[heading_col]) if heading_col else None
+        alt_val = clean_numeric_value(row[alt_col]) if alt_col else None
+        ta_val = int(clean_numeric_value(row[ta_col])) if ta_col and clean_numeric_value(row[ta_col]) is not None else None
+        cqi_val = int(clean_numeric_value(row[cqi_col])) if cqi_col and clean_numeric_value(row[cqi_col]) is not None else None
+        eci_val = int(clean_numeric_value(row[eci_col])) if eci_col and clean_numeric_value(row[eci_col]) is not None else None
 
         # TAC, EARFCN, RSSI, Operator, Network Type
         tac_val = int(clean_numeric_value(row[tac_col])) if tac_col and clean_numeric_value(row[tac_col]) is not None else None
@@ -291,6 +299,10 @@ def process_and_summarize_dataset(
             operator=op_val,
             accuracy_m=acc_val,
             heading_deg=heading_val,
+            timing_advance=ta_val,
+            cqi=cqi_val,
+            eci=eci_val,
+            altitude_m=alt_val,
         )
         points.append(point)
 

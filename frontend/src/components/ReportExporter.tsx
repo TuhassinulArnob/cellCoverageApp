@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { DatasetSummary, ExtendedDatasetAnalysis } from '../types/cellscope';
 import { getCsvExportUrl } from '../services/api';
 import {
@@ -14,6 +14,8 @@ interface ReportExporterProps {
 }
 
 export const ReportExporter: React.FC<ReportExporterProps> = ({ summary }) => {
+  const [reportDate] = useState(() => new Date().toLocaleDateString());
+
   if (!summary) return null;
 
   const handlePrint = () => {
@@ -83,7 +85,7 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ summary }) => {
           <div className="text-right text-xs font-mono text-slate-400">
             <div>Standard: 3GPP TS 36.133 / 38.133</div>
             <div>Datum: WGS84 (EPSG:4326)</div>
-            <div>Date: {new Date().toLocaleDateString()}</div>
+            <div>Date: {reportDate}</div>
           </div>
         </div>
 

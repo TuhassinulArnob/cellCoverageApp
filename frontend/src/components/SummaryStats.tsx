@@ -1,6 +1,12 @@
-import React from 'react';
-import type { DatasetSummary, DistributionStats } from '../types/cellscope';
+import React, { useMemo } from 'react';
+import type {
+  DatasetSummary,
+  DistributionStats,
+  MeasurementPoint,
+  ExtendedDatasetAnalysis,
+} from '../types/cellscope';
 import { KpiCard } from './KpiCard';
+import { resolveEarfcn, analyzePciMod3Collisions, getPciMod3Shift } from '../utils/telecom';
 import {
   Signal,
   Activity,
@@ -15,13 +21,68 @@ import {
   ShieldCheck,
   Layers,
   Clock,
+  Cpu,
+  BarChart2,
 } from 'lucide-react';
 
 interface SummaryStatsProps {
   summary: DatasetSummary | null;
+  measurements?: MeasurementPoint[];
+  extendedAnalysis?: ExtendedDatasetAnalysis | null;
 }
 
-export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
+export const SummaryStats: React.FC<SummaryStatsProps> = ({
+  summary,
+  measurements = [],
+}) => {
+  // Compute Band & Carrier Inventory using 3GPP TS 36.101 standard math
+  const carrierInventory = useMemo(() => {
+    const earfcnMap = new Map<number, { count: number; pcis: Set<number>; rsrpSum: number }>();
+
+    for (const m of measurements) {
+      if (m.earfcn !== null && m.earfcn !== undefined && m.earfcn > 0) {
+        const curr = earfcnMap.get(m.earfcn) || { count: 0, pcis: new Set<number>(), rsrpSum: 0 };
+        curr.count++;
+        if (m.serving_cell_id !== null) curr.pcis.add(m.serving_cell_id);
+        if (m.rsrp_dbm !== null) curr.rsrpSum += m.rsrp_dbm;
+        earfcnMap.set(m.earfcn, curr);
+      }
+    }
+
+    return Array.from(earfcnMap.entries()).map(([earfcn, stat]) => {
+      const res = resolveEarfcn(earfcn);
+      return {
+        earfcn,
+        bandNumber: res?.bandNumber ?? 'Custom',
+        designation: res?.designation ?? 'LTE Carrier',
+        duplexMode: res?.duplexMode ?? 'FDD',
+        dlFrequencyMhz: res?.dlFrequencyMhz ?? null,
+        ulFrequencyMhz: res?.ulFrequencyMhz ?? null,
+        sampleCount: stat.count,
+        samplePct: measurements.length > 0 ? Math.round((stat.count / measurements.length) * 100) : 0,
+        uniquePcisCount: stat.pcis.size,
+        meanRsrp: stat.count > 0 ? Math.round((stat.rsrpSum / stat.count) * 10) / 10 : null,
+        operators: res?.bangladeshOperators ?? [],
+      };
+    }).sort((a, b) => b.sampleCount - a.sampleCount);
+  }, [measurements]);
+
+  // Compute PCI Modulo-3 Collision and Reuse stats
+  const pciCollisions = useMemo(() => analyzePciMod3Collisions(measurements), [measurements]);
+
+  // Serving vs Neighbor RSRP Comparison
+  const neighborComparison = useMemo(() => {
+    const pointsWithNeighbor = measurements.filter(
+      (m) => m.neighbor_cell_id !== null && m.serving_cell_id !== null && m.rsrp_dbm !== null
+    );
+
+    return {
+      count: pointsWithNeighbor.length,
+      samplePct: measurements.length > 0 ? Math.round((pointsWithNeighbor.length / measurements.length) * 100) : 0,
+      uniqueNeighbors: new Set(pointsWithNeighbor.map((m) => m.neighbor_cell_id)).size,
+    };
+  }, [measurements]);
+
   if (!summary) return null;
 
   const renderDistributionBar = (title: string, dist: DistributionStats, total: number) => {
@@ -208,6 +269,174 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
         </div>
       )}
 
+      {/* Band & Carrier Inventory Table (3GPP TS 36.101 Standards-Based) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-cyan-400" />
+            <h4 className="font-semibold text-sm text-slate-200">
+              RF Carrier & Band Inventory (3GPP TS 36.101 / TS 38.101)
+            </h4>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {carrierInventory.length > 0 ? `${carrierInventory.length} Detected Carrier Frequencies` : 'Single Carrier'}
+          </span>
+        </div>
+
+        {carrierInventory.length === 0 ? (
+          <p className="text-xs text-slate-400 py-2">No carrier channel (EARFCN/ARFCN) recorded in loaded dataset.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                  <th className="pb-2">Channel (EARFCN)</th>
+                  <th className="pb-2">3GPP Band</th>
+                  <th className="pb-2">Duplex Mode</th>
+                  <th className="pb-2">DL Frequency</th>
+                  <th className="pb-2">UL Frequency</th>
+                  <th className="pb-2">Serving PCIs</th>
+                  <th className="pb-2">Samples (%)</th>
+                  <th className="pb-2">Mean RSRP</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-300 font-mono">
+                {carrierInventory.map((item) => (
+                  <tr key={item.earfcn} className="hover:bg-slate-800/40">
+                    <td className="py-2.5 font-bold text-cyan-400">CH {item.earfcn}</td>
+                    <td className="py-2.5">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-sky-950 text-sky-400 border border-sky-800/60 font-semibold">
+                        Band {item.bandNumber} ({item.designation})
+                      </span>
+                    </td>
+                    <td className="py-2.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        item.duplexMode === 'TDD' ? 'bg-amber-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                      }`}>
+                        {item.duplexMode}
+                      </span>
+                    </td>
+                    <td className="py-2.5 font-bold text-white">
+                      {item.dlFrequencyMhz !== null ? `${item.dlFrequencyMhz} MHz` : '—'}
+                    </td>
+                    <td className="py-2.5 text-slate-400">
+                      {item.ulFrequencyMhz !== null ? `${item.ulFrequencyMhz} MHz` : '—'}
+                    </td>
+                    <td className="py-2.5 text-slate-300">{item.uniquePcisCount} PCIs</td>
+                    <td className="py-2.5 font-semibold text-white">
+                      {item.sampleCount} <span className="text-slate-500 font-normal">({item.samplePct}%)</span>
+                    </td>
+                    <td className="py-2.5 font-bold text-emerald-400">
+                      {item.meanRsrp !== null ? `${item.meanRsrp} dBm` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* PCI Reuse & CRS Modulo-3 Shift Collision Analysis */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4 text-cyan-400" />
+            <h4 className="font-semibold text-sm text-slate-200">
+              PCI Reuse & LTE CRS Modulo-3 Shift Grouping (v_shift = PCI mod 3)
+            </h4>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {pciCollisions.length > 0 ? (
+              <span className="text-amber-400 font-bold">{pciCollisions.length} Shift Collisions</span>
+            ) : (
+              <span className="text-emerald-400">Clean Shift Orthogonality</span>
+            )}
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+          In 3GPP LTE, the Cell-specific Reference Signal (CRS) frequency position shifts according to{' '}
+          <code className="text-cyan-400 font-mono font-semibold">v_shift = PCI mod 3</code>. When co-channel neighbor cells share the same
+          shift, CRS subcarriers directly overlap, generating pilot interference that degrades SINR and CQI.
+        </p>
+
+        {pciCollisions.length === 0 ? (
+          <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-lg p-3 text-xs text-emerald-400 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            <span>No CRS modulo-3 collisions detected across observed carrier frequencies.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pciCollisions.map((col, idx) => (
+              <div key={idx} className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+                      v_shift = {col.vShift}
+                    </span>
+                    <span className="font-mono text-slate-300">
+                      {col.earfcn > 0 ? `EARFCN ${col.earfcn}` : 'Default Carrier'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-rose-400 font-mono font-bold">CRS Collision Risk</span>
+                </div>
+                <div className="space-y-1 font-mono text-[11px] text-slate-300 pt-1">
+                  {col.cells.map((c) => (
+                    <div key={c.pci} className="flex items-center justify-between border-t border-slate-800/60 pt-1">
+                      <span className="text-cyan-400 font-bold">PCI {c.pci}</span>
+                      <span className="text-slate-400">{c.sampleCount} samples</span>
+                      <span className="text-emerald-400">{c.meanRsrp !== null ? `${c.meanRsrp} dBm` : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Serving vs Neighbor Cell Comparison Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-cyan-400" />
+            <h4 className="font-semibold text-sm text-slate-200">Serving vs. Neighbor Cell Intelligence</h4>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {neighborComparison.uniqueNeighbors} Monitored Neighbor PCIs
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg">
+            <span className="text-slate-400 block mb-1">Neighbor Samples Logged</span>
+            <div className="text-xl font-bold font-mono text-cyan-400">
+              {neighborComparison.count.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-slate-500">{neighborComparison.samplePct}% of survey points</span>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg">
+            <span className="text-slate-400 block mb-1">Handover Trigger Rate</span>
+            <div className="text-xl font-bold font-mono text-rose-400">
+              {summary.handover_trigger_rate_pct}%
+            </div>
+            <span className="text-[10px] text-slate-500">{summary.handover_trigger_count} total handovers</span>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-lg">
+            <span className="text-slate-400 block mb-1">Handover Hysteresis Evaluation</span>
+            <div className="text-xl font-bold font-mono text-emerald-400">
+              {summary.handover_trigger_rate_pct < 10 ? 'Optimal (Stable)' : 'High Ping-Pong Risk'}
+            </div>
+            <span className="text-[10px] text-slate-500">
+              {summary.handover_trigger_rate_pct < 10 ? 'Event A3 margin well configured' : 'Hysteresis adjustment recommended'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Distribution Bars */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {renderDistributionBar('RSRP Coverage', summary.rsrp_distribution, summary.total_records)}
@@ -221,7 +450,9 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Radio className="w-4 h-4 text-cyan-400" />
-              <h4 className="font-semibold text-sm text-slate-200">Per-Cell Radio Performance Statistics ({summary.per_cell_stats.length} Serving PCIs)</h4>
+              <h4 className="font-semibold text-sm text-slate-200">
+                Per-Cell Radio Performance Statistics ({summary.per_cell_stats.length} Serving PCIs)
+              </h4>
             </div>
             <span className="text-xs text-slate-400 font-mono">Sorted by Sample Volume</span>
           </div>
@@ -230,6 +461,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-mono">
                   <th className="pb-2">Serving PCI</th>
+                  <th className="pb-2">CRS Shift</th>
                   <th className="pb-2">Generation</th>
                   <th className="pb-2">Channel (EARFCN)</th>
                   <th className="pb-2">TAC</th>
@@ -242,32 +474,36 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({ summary }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-300 font-mono">
-                {summary.per_cell_stats.map((cell) => (
-                  <tr key={cell.pci} className="hover:bg-slate-800/40">
-                    <td className="py-2.5 font-bold text-cyan-400">PCI {cell.pci}</td>
-                    <td className="py-2.5">
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-sky-950 text-sky-400 border border-sky-800/60">
-                        {cell.network_gen}
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-slate-400">{cell.earfcn ? `EARFCN ${cell.earfcn}` : 'Standard'}</td>
-                    <td className="py-2.5 text-slate-400">{cell.tac ?? 'N/A'}</td>
-                    <td className="py-2.5 font-semibold text-white">
-                      {cell.sample_count} <span className="text-slate-500 font-normal">({cell.sample_pct}%)</span>
-                    </td>
-                    <td className="py-2.5 font-bold text-emerald-400">{cell.mean_rsrp_dbm ?? 'N/A'} dBm</td>
-                    <td className="py-2.5 text-slate-400">{cell.min_rsrp_dbm ?? 'N/A'} dBm</td>
-                    <td className="py-2.5 text-sky-300">{cell.mean_rsrq_db ?? 'N/A'} dB</td>
-                    <td className="py-2.5 text-amber-300">{cell.mean_cinr_db ?? 'N/A'} dB</td>
-                    <td className="py-2.5">
-                      {cell.handover_count > 0 ? (
-                        <span className="text-rose-400 font-bold">⚡ {cell.handover_count}</span>
-                      ) : (
-                        <span className="text-slate-500">0</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {summary.per_cell_stats.map((cell) => {
+                  const shift = getPciMod3Shift(cell.pci);
+                  return (
+                    <tr key={cell.pci} className="hover:bg-slate-800/40">
+                      <td className="py-2.5 font-bold text-cyan-400">PCI {cell.pci}</td>
+                      <td className="py-2.5 text-slate-400">v_shift = {shift}</td>
+                      <td className="py-2.5">
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-sky-950 text-sky-400 border border-sky-800/60">
+                          {cell.network_gen}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-slate-400">{cell.earfcn ? `EARFCN ${cell.earfcn}` : 'Standard'}</td>
+                      <td className="py-2.5 text-slate-400">{cell.tac ?? 'N/A'}</td>
+                      <td className="py-2.5 font-semibold text-white">
+                        {cell.sample_count} <span className="text-slate-500 font-normal">({cell.sample_pct}%)</span>
+                      </td>
+                      <td className="py-2.5 font-bold text-emerald-400">{cell.mean_rsrp_dbm ?? 'N/A'} dBm</td>
+                      <td className="py-2.5 text-slate-400">{cell.min_rsrp_dbm ?? 'N/A'} dBm</td>
+                      <td className="py-2.5 text-sky-300">{cell.mean_rsrq_db ?? 'N/A'} dB</td>
+                      <td className="py-2.5 text-amber-300">{cell.mean_cinr_db ?? 'N/A'} dB</td>
+                      <td className="py-2.5">
+                        {cell.handover_count > 0 ? (
+                          <span className="text-rose-400 font-bold">⚡ {cell.handover_count}</span>
+                        ) : (
+                          <span className="text-slate-500">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

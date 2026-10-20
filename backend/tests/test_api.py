@@ -111,3 +111,26 @@ def test_export_csv_extended():
     assert response.status_code == 200
     assert "Heading (deg)" in response.text
 
+
+
+def test_upload_and_parse_extended_telemetry():
+    csv_content = """Timestamp,Latitude,Longitude,Speed (km/h),Serving Cell ID,Serving Cell RSRP,Serving Cell RSRQ,Serving Cell CINR,Handover Trigger,TAC,EARFCN,RSSI (dBm),Network Type,Operator,Altitude (m),Accuracy (m),Bearing (deg),ECI,CQI,Timing Advance,GPS Valid
+2026-10-20T05:06:57.100+06:00,23.810331,90.412518,12.50,4,-85,-8,14.5,0,50030,1399,-80,LTE,Robi,15.2,3.5,120.0,268435457,12,1,1
+"""
+    files = {"file": ("extended_test.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")}
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["total_records"] == 1
+
+    resp_m = client.get("/api/datasets/current/measurements")
+    assert resp_m.status_code == 200
+    points = resp_m.json()
+    assert len(points) == 1
+    pt = points[0]
+    assert pt["timing_advance"] == 1
+    assert pt["cqi"] == 12
+    assert pt["eci"] == 268435457
+    assert pt["altitude_m"] == 15.2
+    assert pt["earfcn"] == 1399
+    assert pt["rsrp_dbm"] == -85.0

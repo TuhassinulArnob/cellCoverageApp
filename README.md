@@ -78,6 +78,19 @@
 * **Multi-Scale Traffic Estimation:** Detects cell sector congestion by correlating high RSRP (> -90 dBm) with depressed RSRQ (< -14 dB) and degraded throughput (< 2.0 Mbps).
 * **Stronger Neighbor Intelligence ("Why Not Connected?"):** Evaluates delta RSRP ($\Delta \text{RSRP} \ge +6.0\text{ dB}$) against neighbor sectors to diagnose handover ping-pong, CIO bias, or missing neighbor relations.
 
+### 7. Laptop Web Dashboard v3.0 Feature Parity & Multi-Layer GIS Synchronization
+* **Refactored Header & Responsive Navigation:** Clean "CellScope 5G" branding, "v3.0 Production" badge, responsive max-width layout (`max-w-[1720px]`), and adaptive navigation tabs with dual short/full label breakpoints (`shortLabel` on 1280–1440px laptop displays, `fullLabel` on ≥ 1440px displays), completely eliminating tab clipping, wrapping, and horizontal scrollbars.
+* **Multi-Layer Map Overlay Engine:** Leaflet GIS integration with dedicated layer groups and instant visibility controls:
+  * **Metric Points Layer:** Physical radio measurements with color scales for `RSRP (dBm)`, `RSRQ (dB)`, `CINR / SINR (dB)` (clarifying telecom nomenclature), `PCI Mod-3 Shift`, `TA Range`, and `Speed (km/h)`.
+  * **Survey Route Track:** Continuous glowing directional polyline tracing GPS fixes in chronological order.
+  * **Weak Coverage Zones Corridors:** Contiguous weak coverage corridors (RSRP < -105 dBm) highlighted with amber/orange polylines and fade inspection markers.
+  * **Handover Transition Badges:** Elevated diamond markers at serving cell handoffs with `from PCI → to PCI` tooltip diagnostics and timestamp provenance.
+  * **Estimated Cell Sites:** Tower centroid locations estimated from RF power-weighted triangulation ($\sum w_i \mathbf{x}_i / \sum w_i$ where $w_i = 10^{\text{RSRP}_i/10}$) with antenna icons and dashed coverage/uncertainty circles.
+  * **Timing Advance (TA) Range:** Range uncertainty circles derived from $d \approx \text{TA} \times 78.12\text{ meters}$.
+* **Advanced Slide-over Telecom Filter Drawer:** Comprehensive multi-parameter filtering by Serving PCI, RAT Generation (`5G NR`, `4G LTE`, `3G UMTS`, `2G GSM`), Network Operator, Carrier Frequency / EARFCN, Signal Quality classes, Handover-only, and Weak-zone-only toggles. Filter selections dynamically recompute map layers, session KPIs, distributions, and data tables.
+* **3GPP TS 36.101 Carrier & Band Inventory:** Instant calculation of downlink ($F_{\text{DL}}$) and uplink ($F_{\text{UL}}$) center frequencies from detected EARFCNs, paired with duplex mode (FDD/TDD) and Bangladesh operator allocations.
+* **LTE CRS Modulo-3 Interference Grouping:** Automatic grouping of observed PCIs by $v_{\text{shift}} = \text{PCI} \bmod 3$ with co-channel collision risk warnings.
+
 ---
 
 ## Mathematical Formulations
@@ -169,8 +182,9 @@ All verification suites have been executed and verified in place:
 
 * **Android Unit Tests:** **272 / 272 Passed** (100% success rate across 52 test suites via `.\android\gradlew.bat testDebugUnitTest` in 50s, 0 failures).
 * **Android Debug APK Assembly:** **BUILD SUCCESSFUL** via `assembleDebug` (`CellScope-v3.0.apk` ~48.9 MB / 51,231,052 bytes).
-* **FastAPI Backend Analytics:** **19 / 19 Passed** (`python -m pytest backend/tests` in 7.00s, 0 failures).
-* **Frontend Production Build:** **BUILD SUCCESSFUL** (`npm run build`, 1,932 modules transformed in 1.48s, 0 errors).
+* **FastAPI Backend Analytics:** **20 / 20 Passed** (`python -m pytest backend/tests`, 0 failures).
+* **Frontend Production Build:** **BUILD SUCCESSFUL** (`npm run build`, 1,934 modules transformed in 0.97s, 0 errors).
+* **Frontend Static Code Quality:** **0 Warnings, 0 Errors** (`npm run lint` via oxlint).
 * **End-to-End CSV Regression:** **100% Passed** (`MultiSectionCsvRegressionTest` validating 6-section survey dataset).
 
 ---

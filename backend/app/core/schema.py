@@ -28,6 +28,10 @@ class MeasurementPoint(BaseModel):
     operator: Optional[str] = None
     accuracy_m: Optional[float] = None
     heading_deg: Optional[float] = None
+    timing_advance: Optional[int] = None
+    cqi: Optional[int] = None
+    eci: Optional[int] = None
+    altitude_m: Optional[float] = None
     anomaly_label: Optional[str] = None
 
 
@@ -196,4 +200,3 @@ class AvailableDatasetInfo(BaseModel):
     rows: int
     has_gps: bool
     description: str
-
