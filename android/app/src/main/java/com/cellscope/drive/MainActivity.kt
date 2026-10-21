@@ -650,6 +650,55 @@ class MainActivity : AppCompatActivity() {
         showUniversalEventPlannerDialog(state)
     }
 
+    private fun showSinrDiagnosticsDialog(lte: LteMetrics) {
+        val bwRb = com.cellscope.drive.telephony.SinrDiagnostics.bandwidthToResourceBlocks(lte.bandwidthKhz)
+        val bwStr = lte.bandwidthKhz?.let { "${it / 1000} MHz ($bwRb RBs)" } ?: "10 MHz nominal ($bwRb RBs)"
+        val rsrpStr = lte.rsrpDbm?.let { "$it dBm" } ?: "Unavailable"
+        val rsrqStr = lte.rsrqDb?.let { "$it dB" } ?: "Unavailable"
+        val rssiStr = lte.rssiDbm?.let { "$it dBm" } ?: lte.impliedRssiDbm?.let { String.format(Locale.US, "%.1f dBm (Implied)", it) } ?: "Unavailable"
+        val sinrStr = lte.sinrDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "Unavailable"
+
+        val msg = StringBuilder()
+        msg.append("Source Provenance: ${lte.sinrSource}\n")
+        msg.append("Current SINR: $sinrStr\n\n")
+
+        msg.append("── Physical Channel Inputs ──\n")
+        msg.append("• Serving RSRP: $rsrpStr\n")
+        msg.append("• Serving RSRQ: $rsrqStr\n")
+        msg.append("• Carrier RSSI: $rssiStr\n")
+        msg.append("• Bandwidth: $bwStr\n")
+        msg.append("• Serving Cell PCI: ${lte.servingPci ?: "—"} (EARFCN: ${lte.earfcn ?: "—"})\n\n")
+
+        msg.append("── Methodology & Radio Model ──\n")
+        msg.append("• Method: ${lte.estimationMethod ?: "Standard 3GPP channel evaluation"}\n")
+        if (lte.sinrSource == "ESTIMATED") {
+            msg.append("• Formula: 3GPP TS 36.214 Carrier RSSI Relation:\n")
+            msg.append("   RSRQ = N × (RSRP / RSSI)\n")
+            msg.append("   SINR_est = 10 × log10(12 / (1/RSRQ_linear - 7.0))\n")
+            msg.append("• Assumptions: 50% cell traffic load factor (η = 0.5), uniform subcarrier interference, flat Rayleigh channel.\n")
+            msg.append("• Estimation Uncertainty: ±3.5 dB error bound due to unmeasured dynamic PRB scheduling.\n\n")
+        } else if (lte.sinrSource == "MEASURED") {
+            msg.append("• Details: Direct physical hardware measurement reported by device baseband modem RIL (CellSignalStrengthLte.rssnr or 5G SS-SINR).\n\n")
+        } else {
+            msg.append("• Reason: Device baseband modem HAL does not expose physical RSSNR register, and physical inputs are incomplete for estimation.\n\n")
+        }
+
+        msg.append("── Qualitative RF Assessment ──\n")
+        msg.append("• ${lte.qualitativeDiagnostic ?: "Channel quality assessment unavailable"}\n")
+        val edgeCenter = when {
+            (lte.rsrpDbm ?: -140) >= -90 && (lte.sinrDb ?: -20.0) >= 12.0 -> "Cell-Center (Dominant serving beam, high throughput potential)"
+            (lte.rsrpDbm ?: -140) < -105 || (lte.sinrDb ?: 0.0) < 3.0 -> "Cell-Edge (Interference limited or weak coverage boundary)"
+            else -> "Mid-Cell (Nominal operational coverage)"
+        }
+        msg.append("• Geometry: $edgeCenter\n")
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("SINR Diagnostics & Radio Model")
+            .setMessage(msg.toString())
+            .setPositiveButton("Dismiss", null)
+            .show()
+    }
+
     private fun showSampleMeasurementDetailsDialog(m: LteMeasurementEntity) {
         val carrierInfo = com.cellscope.drive.telephony.CellularBandResolver.resolveMeasurement(m)
         val bandStr = carrierInfo?.let { "${it.bandName} (${it.duplexMode}) • DL ${it.dlCenterFreqMhz} MHz" } ?: "Channel: ${m.channelNumber ?: m.earfcn ?: "Unavailable"}"
@@ -711,7 +760,20 @@ class MainActivity : AppCompatActivity() {
         } else {
             addField("LTE RSRP", m.rsrpDbm?.let { "$it dBm" } ?: "Unavailable")
             addField("LTE RSRQ", m.rsrqDb?.let { "$it dB" } ?: "Unavailable")
-            addField("LTE SINR", m.sinrDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "Unavailable")
+            val sinrBadge = if (m.sinrSource != "UNAVAILABLE") " [${m.sinrSource}]" else ""
+            addField("LTE SINR", m.sinrDb?.let { String.format(Locale.US, "%.1f dB%s", it, sinrBadge) } ?: "Unavailable")
+            if (m.sinrSource == "ESTIMATED") {
+                addField("SINR Estimation Model", m.estimationMethod ?: "3GPP TS 36.214 Load Model")
+                if (m.impliedRssiDbm != null) {
+                    addField("Implied RSSI", String.format(Locale.US, "%.1f dBm", m.impliedRssiDbm))
+                }
+                addField("Estimation Uncertainty", "±3.5 dB (Nominal 50% cell load assumption)")
+            } else if (m.sinrSource == "MEASURED") {
+                addField("SINR Measurement", "Direct physical modem RSSNR report")
+            }
+            if (m.qualitativeDiagnostic != null) {
+                addField("RF Condition Assessment", m.qualitativeDiagnostic)
+            }
             addField("LTE RSSI", m.rssiDbm?.let { "$it dBm" } ?: "Unavailable")
             addField("CQI (Channel Quality)", m.cqi?.toString() ?: "Unavailable")
             addField("Timing Advance", m.timingAdvance?.toString() ?: "Unavailable")
@@ -1222,11 +1284,15 @@ class MainActivity : AppCompatActivity() {
         val isPingPong = trans.details.contains("ping-pong", ignoreCase = true) || trans.eventType.contains("PING_PONG", ignoreCase = true)
         val classificationLabel = when {
             isPingPong -> "RAPID PING-PONG CANDIDATE"
-            trans.eventType == "CONFIRMED_HANDOVER" -> "CONFIRMED HANDOVER (Inter-TAC Signaled)"
+            trans.eventType == "CONFIRMED_HANDOVER" -> "CONFIRMED HANDOVER"
+            trans.eventType == "INTRA_FREQ" -> "INTRA-FREQUENCY TRANSITION"
+            trans.eventType == "INTER_FREQ" -> "INTER-FREQUENCY TRANSITION"
+            trans.eventType == "INTER_RAT" -> "INTER-RAT TRANSITION"
             trans.eventType == "CELL_RESELECTION" -> "CELL RESELECTION (Stationary / Low Speed)"
             trans.eventType == "SIGNAL_LOSS" -> "SIGNAL LOSS RESELECTION (< -115 dBm Collapse)"
-            trans.details.contains("Intra-Freq", ignoreCase = true) -> "INTRA-FREQUENCY SERVING CELL SWITCH"
-            trans.details.contains("Inter-Freq", ignoreCase = true) -> "INTER-FREQUENCY SERVING CELL SWITCH"
+            trans.details.contains("Intra-Freq", ignoreCase = true) -> "INTRA-FREQUENCY TRANSITION"
+            trans.details.contains("Inter-Freq", ignoreCase = true) -> "INTER-FREQUENCY TRANSITION"
+            trans.details.contains("Inter-RAT", ignoreCase = true) -> "INTER-RAT TRANSITION"
             else -> "OBSERVED SERVING-CELL TRANSITION"
         }
 
@@ -1598,6 +1664,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        binding.cardSinrDiagnostics.setOnClickListener {
+            showSinrDiagnosticsDialog(recorder.latestLte.value)
+        }
+        binding.tvSinr.setOnClickListener {
+            showSinrDiagnosticsDialog(recorder.latestLte.value)
+        }
         binding.btnSessionClear.setOnClickListener {
             switchToLiveMode()
         }
@@ -2116,7 +2188,12 @@ class MainActivity : AppCompatActivity() {
             binding.tvSelectedCellFreq.text = "Center: ${String.format(Locale.US, "%.1f", info.dlCenterFreqMhz)} MHz | $bwText$duplexExtra"
             val rsrpText = cell.rsrpDbm?.let { "$it dBm" } ?: "— dBm"
             val rsrqText = cell.rsrqDb?.let { "$it dB" } ?: "— dB"
-            val sinrText = cell.sinrDb?.let { String.format(Locale.US, "%.1f dB [MEASURED]", it) } ?: "Unavailable [UNEXPOSED]"
+            val sinrProvenanceTag = when (cell.sinrSource) {
+                com.cellscope.drive.telephony.SinrDiagnostics.SOURCE_MEASURED -> "[MEASURED]"
+                com.cellscope.drive.telephony.SinrDiagnostics.SOURCE_ESTIMATED -> "[ESTIMATED ⓘ]"
+                else -> "[UNAVAILABLE]"
+            }
+            val sinrText = cell.sinrDb?.let { String.format(Locale.US, "%.1f dB %s", it, sinrProvenanceTag) } ?: "Unavailable [UNEXPOSED]"
             binding.tvSelectedCellRf.text = "RSRP: $rsrpText | RSRQ: $rsrqText | SINR: $sinrText"
         }
 
@@ -2404,7 +2481,48 @@ class MainActivity : AppCompatActivity() {
             binding.tvRsrp.setTextColor(ContextCompat.getColor(this, R.color.on_background))
         }
 
-        binding.tvSinr.text = lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [MEASURED]" } ?: "SINR: UNAVAILABLE"
+        val sinrColor = when {
+            lte.sinrDb == null -> R.color.text_secondary
+            lte.sinrDb >= 20.0 -> R.color.rf_excellent
+            lte.sinrDb >= 13.0 -> R.color.rf_good
+            lte.sinrDb >= 0.0 -> R.color.rf_fair
+            else -> R.color.rf_poor
+        }
+
+        binding.tvSinr.text = when (lte.sinrSource) {
+            "MEASURED" -> lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [MEASURED]" } ?: "SINR: UNAVAILABLE"
+            "ESTIMATED" -> lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [ESTIMATED ⓘ]" } ?: "SINR: UNAVAILABLE"
+            else -> "SINR: UNAVAILABLE"
+        }
+        binding.tvSinr.setTextColor(ContextCompat.getColor(this, sinrColor))
+
+        binding.tvSinrValue.text = lte.sinrDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "— dB"
+        binding.tvSinrValue.setTextColor(ContextCompat.getColor(this, sinrColor))
+
+        when (lte.sinrSource) {
+            "MEASURED" -> {
+                binding.tvSinrSourceBadge.text = "[MEASURED]"
+                binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.rf_excellent))
+                binding.tvSinrIndicatorIcon.visibility = View.GONE
+                binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Modem physical baseband measurement"
+                binding.tvSinrModelDetails.text = "Direct modem hardware RSSNR register. Tap for measurement context."
+            }
+            "ESTIMATED" -> {
+                binding.tvSinrSourceBadge.text = "[ESTIMATED ⓘ]"
+                binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.rf_fair))
+                binding.tvSinrIndicatorIcon.visibility = View.VISIBLE
+                binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Calibrated radio model estimate"
+                val rssiStr = lte.impliedRssiDbm?.let { String.format(Locale.US, "%.1f dBm", it) } ?: "—"
+                binding.tvSinrModelDetails.text = "3GPP TS 36.214 Load Model (Implied RSSI: $rssiStr). Tap to inspect formula."
+            }
+            else -> {
+                binding.tvSinrSourceBadge.text = "[UNAVAILABLE]"
+                binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                binding.tvSinrIndicatorIcon.visibility = View.GONE
+                binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Modem does not expose hardware SNR"
+                binding.tvSinrModelDetails.text = "Tap to inspect RF channel conditions and estimation requirements."
+            }
+        }
         binding.tvRsrq.text = lte.rsrqDb?.let { "RSRQ: $it dB [MEASURED]" } ?: "RSRQ: — dB"
         binding.tvRssi.text = lte.rssiDbm?.let { "RSSI: $it dBm [MEASURED]" } ?: "RSSI: — dBm"
         binding.tvEarfcn.text = lte.earfcn?.let { "EARFCN: $it" } ?: "EARFCN: —"
@@ -2803,7 +2921,8 @@ class MainActivity : AppCompatActivity() {
                 transitionAdapter.updateTransitions(handoverSummary.transitionEvents)
 
                 // Dedicated Mobility Timeline Chart
-                binding.chartMobilityTimeline.setData(transitions)
+                val timelineEvents = if (transitions.isNotEmpty()) transitions else handoverSummary.transitionEvents
+                binding.chartMobilityTimeline.setData(timelineEvents)
 
                 // Update Tower Tab UI
                 binding.tvTowerSummary.text = "${towers.size} Candidate Cell Centroids Estimated"

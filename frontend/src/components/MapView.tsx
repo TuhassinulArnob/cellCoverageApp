@@ -8,6 +8,7 @@ import type {
   MapOverlayState,
   EstimatedCellSite,
   QoeTestRecord,
+  CellTransitionEvent,
 } from '../types/cellscope';
 import { estimateCellSites, resolveEarfcn, timingAdvanceToMeters } from '../utils/telecom';
 import { useTheme } from '../context/useTheme';
@@ -63,6 +64,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const [activeMetric, setActiveMetric] = useState<ActiveMetric>('rsrp');
   const [selectedPoint, setSelectedPoint] = useState<MeasurementPoint | null>(null);
   const [selectedSite, setSelectedSite] = useState<EstimatedCellSite | null>(null);
+  const [selectedTransition, setSelectedTransition] = useState<CellTransitionEvent | null>(null);
   const [prevTheme, setPrevTheme] = useState(theme);
   const [basemapOverride, setBasemapOverride] = useState<boolean | null>(null);
   const [tileError, setTileError] = useState<boolean>(false);
@@ -118,7 +120,7 @@ export const MapView: React.FC<MapViewProps> = ({
       if (v >= -14) return '#84cc16';
       if (v >= -17) return '#f59e0b';
       return '#ef4444';
-    } else if (metric === 'cinr') {
+    } else if (metric === 'cinr' || metric === 'sinr') {
       const v = point.cinr_db;
       if (v === null) return '#64748b';
       if (v >= 20) return '#10b981';
@@ -300,60 +302,182 @@ export const MapView: React.FC<MapViewProps> = ({
 
     if (!overlays.handovers) return;
 
-    const hoPoints = validGpsPoints.filter((p) => p.handover_trigger === 1);
+    const hasStructuredTransitions = extendedAnalysis?.transitions && extendedAnalysis.transitions.length > 0;
 
-    hoPoints.forEach((point) => {
-      const lat = point.latitude!;
-      const lon = point.longitude!;
+    if (hasStructuredTransitions) {
+      extendedAnalysis.transitions.forEach((t) => {
+        let lat: number | null = t.latitude ?? null;
+        if (lat === null && t.index !== undefined && validGpsPoints[t.index]) {
+          lat = validGpsPoints[t.index].latitude ?? null;
+        }
+        let lon: number | null = t.longitude ?? null;
+        if (lon === null && t.index !== undefined && validGpsPoints[t.index]) {
+          lon = validGpsPoints[t.index].longitude ?? null;
+        }
+        if (lat === null || lon === null) return;
 
-      const hoIcon = L.divIcon({
-        className: 'cellscope-ho-marker',
-        html: `
-          <div style="
-            width: 20px;
-            height: 20px;
-            background: #ef4444;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.9);
-            transform: rotate(45deg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 3px;
-          ">
-            <span style="
-              transform: rotate(-45deg);
-              color: white;
-              font-size: 10px;
-              font-weight: bold;
-              line-height: 1;
-            ">⚡</span>
-          </div>
-        `,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+        let bg = '#10b981';
+        let symbol = '⚡';
+        let label = 'Confirmed Handover';
+
+        const et = (t.event_type || '').toUpperCase();
+        const isConfirmed = et === 'CONFIRMED_HANDOVER';
+        const isIntra = et === 'INTRA_FREQ' || et === 'INTRA_FREQUENCY';
+        const isInter = et === 'INTER_FREQ' || et === 'INTER_FREQUENCY';
+        const isRat = et === 'INTER_RAT' || et === 'RAT_MOBILITY';
+        const isReselection = et === 'CELL_RESELECTION';
+        const isPingPong = et.includes('PING_PONG') || et.includes('PINGPONG');
+        const isSignalLoss = et === 'SIGNAL_LOSS';
+
+        if (isConfirmed) {
+          bg = '#10b981'; // Green (#10b981) for Confirmed Handover
+          symbol = '⚡';
+          label = 'Confirmed Handover';
+        } else if (isIntra) {
+          bg = '#06b6d4'; // Cyan (#06b6d4) for Intra-Frequency
+          symbol = '↔';
+          label = 'Intra-Frequency Transition';
+        } else if (isInter) {
+          bg = '#3b82f6'; // Blue (#3b82f6) for Inter-Frequency
+          symbol = '⇄';
+          label = 'Inter-Frequency Transition';
+        } else if (isRat) {
+          bg = '#f59e0b'; // Amber (#f59e0b) for Inter-RAT
+          symbol = '⇅';
+          label = 'Inter-RAT Transition';
+        } else if (isReselection) {
+          bg = '#eab308'; // Yellow for Cell Reselection
+          symbol = '⇋';
+          label = 'Cell Reselection';
+        } else if (isPingPong) {
+          bg = '#ef4444'; // Red for Ping-Pong
+          symbol = '↺';
+          label = 'Ping-Pong Candidate';
+        } else if (isSignalLoss) {
+          bg = '#f43f5e'; // Rose for Signal Loss
+          symbol = '⚠';
+          label = 'Signal Loss';
+        } else {
+          bg = '#8b5cf6'; // Purple for Observed Cell Change
+          symbol = '•';
+          label = 'Observed Cell Change';
+        }
+
+        const hoIcon = L.divIcon({
+          className: 'cellscope-ho-marker',
+          html: `
+            <div style="
+              width: 22px;
+              height: 22px;
+              background: ${bg};
+              border: 2px solid #ffffff;
+              box-shadow: 0 0 10px ${bg}cc;
+              transform: rotate(45deg);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 4px;
+              cursor: pointer;
+            ">
+              <span style="
+                transform: rotate(-45deg);
+                color: white;
+                font-size: 11px;
+                font-weight: bold;
+                line-height: 1;
+              ">${symbol}</span>
+            </div>
+          `,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+
+        const marker = L.marker([lat, lon], { icon: hoIcon });
+
+        marker.bindTooltip(
+          `<div class="text-xs font-mono p-1.5 min-w-[200px]">
+            <div class="font-bold flex items-center gap-1.5" style="color: ${bg};">
+              <span>${symbol}</span> <span>${label}</span>
+            </div>
+            <div class="mt-1 text-slate-800 dark:text-slate-200">
+              PCI: <strong>${t.from_pci ?? '—'}</strong> ➔ <strong>${t.to_pci ?? '—'}</strong>
+            </div>
+            ${t.to_channel ? `<div class="text-slate-600 dark:text-slate-300">Carrier: EARFCN ${t.to_channel}</div>` : ''}
+            ${t.delta_signal_db !== undefined && t.delta_signal_db !== null ? `<div class="text-slate-600 dark:text-slate-300">Δ Signal: <strong class="${t.delta_signal_db >= 0 ? 'text-emerald-500' : 'text-rose-500'}">${t.delta_signal_db > 0 ? '+' : ''}${t.delta_signal_db} dB</strong></div>` : ''}
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-1">${t.classification_reason || t.details || ''}</div>
+            <div class="text-[9px] text-slate-400 dark:text-slate-500 mt-1">${t.timestamp_raw}</div>
+          </div>`,
+          { direction: 'top', offset: [0, -12] }
+        );
+
+        marker.on('click', () => {
+          setSelectedTransition(t);
+          setSelectedPoint(null);
+          setSelectedSite(null);
+        });
+
+        marker.addTo(hoLayer);
       });
+    } else {
+      // Fallback to raw handover trigger points if extended transitions unavailable
+      const hoPoints = validGpsPoints.filter((p) => p.handover_trigger === 1);
 
-      const marker = L.marker([lat, lon], { icon: hoIcon });
+      hoPoints.forEach((point) => {
+        const lat = point.latitude!;
+        const lon = point.longitude!;
 
-      marker.bindTooltip(
-        `<div class="text-xs font-mono p-1">
-          <div class="font-bold text-red-500 dark:text-red-400 flex items-center gap-1">⚡ Handover Event</div>
-          <div class="mt-1">Serving PCI: <strong>${point.serving_cell_id ?? 'Unknown'}</strong></div>
-          ${point.neighbor_cell_id ? `<div class="text-cyan-600 dark:text-cyan-300">Target/Neighbor PCI: <strong>${point.neighbor_cell_id}</strong></div>` : ''}
-          <div>RSRP: <strong>${point.rsrp_dbm ?? 'N/A'} dBm</strong></div>
-          <div class="text-slate-500 dark:text-slate-400 text-[10px] mt-1">${point.timestamp_raw}</div>
-        </div>`,
-        { direction: 'top', offset: [0, -10] }
-      );
+        const hoIcon = L.divIcon({
+          className: 'cellscope-ho-marker',
+          html: `
+            <div style="
+              width: 20px;
+              height: 20px;
+              background: #10b981;
+              border: 2px solid #ffffff;
+              box-shadow: 0 0 8px rgba(16, 185, 129, 0.9);
+              transform: rotate(45deg);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 3px;
+              cursor: pointer;
+            ">
+              <span style="
+                transform: rotate(-45deg);
+                color: white;
+                font-size: 10px;
+                font-weight: bold;
+                line-height: 1;
+              ">⚡</span>
+            </div>
+          `,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
+        });
 
-      marker.on('click', () => {
-        setSelectedPoint(point);
+        const marker = L.marker([lat, lon], { icon: hoIcon });
+
+        marker.bindTooltip(
+          `<div class="text-xs font-mono p-1">
+            <div class="font-bold text-emerald-500 dark:text-emerald-400 flex items-center gap-1">⚡ Handover Trigger</div>
+            <div class="mt-1">Serving PCI: <strong>${point.serving_cell_id ?? 'Unknown'}</strong></div>
+            ${point.neighbor_cell_id ? `<div class="text-cyan-600 dark:text-cyan-300">Target/Neighbor PCI: <strong>${point.neighbor_cell_id}</strong></div>` : ''}
+            <div>RSRP: <strong>${point.rsrp_dbm ?? 'N/A'} dBm</strong></div>
+            <div class="text-slate-500 dark:text-slate-400 text-[10px] mt-1">${point.timestamp_raw}</div>
+          </div>`,
+          { direction: 'top', offset: [0, -10] }
+        );
+
+        marker.on('click', () => {
+          setSelectedPoint(point);
+          setSelectedTransition(null);
+          setSelectedSite(null);
+        });
+
+        marker.addTo(hoLayer);
       });
-
-      marker.addTo(hoLayer);
-    });
-  }, [validGpsPoints, overlays.handovers]);
+    }
+  }, [validGpsPoints, extendedAnalysis?.transitions, overlays.handovers]);
 
   // Update Estimated Cell Sites Layer
   useEffect(() => {
@@ -443,12 +567,14 @@ export const MapView: React.FC<MapViewProps> = ({
       const lon = point.longitude!;
       const color = getMarkerColor(point, activeMetric);
       const isHo = point.handover_trigger === 1;
+      const isEstimated = (activeMetric === 'cinr' || activeMetric === 'sinr') && point.sinr_source === 'ESTIMATED';
 
       const marker = L.circleMarker([lat, lon], {
         radius: isHo ? 7 : 5,
         fillColor: color,
-        color: isHo ? '#ffffff' : color,
-        weight: isHo ? 2 : 1,
+        color: isHo ? '#ffffff' : (isEstimated ? '#ffffff' : color),
+        weight: isHo ? 2 : (isEstimated ? 2 : 1),
+        dashArray: isEstimated ? '3, 3' : undefined,
         opacity: 0.95,
         fillOpacity: 0.85,
       });
@@ -458,8 +584,8 @@ export const MapView: React.FC<MapViewProps> = ({
           ? `${point.rsrp_dbm ?? 'N/A'} dBm`
           : activeMetric === 'rsrq'
           ? `${point.rsrq_db ?? 'N/A'} dB`
-          : activeMetric === 'cinr'
-          ? `${point.cinr_db ?? 'N/A'} dB`
+          : activeMetric === 'cinr' || activeMetric === 'sinr'
+          ? `${point.cinr_db ?? 'N/A'} dB ${point.sinr_source === 'ESTIMATED' ? '[EST]' : point.sinr_source === 'MEASURED' ? '[MEAS]' : ''}`
           : activeMetric === 'pci'
           ? `PCI ${point.serving_cell_id ?? 'N/A'} (Shift ${point.serving_cell_id ? ((point.serving_cell_id % 3) + 3) % 3 : '—'})`
           : activeMetric === 'ta'
@@ -787,6 +913,75 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
       )}
 
+      {/* Handover & Transition Inspector Modal (Bottom Right) */}
+      {selectedTransition && !selectedPoint && !selectedSite && (
+        <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-emerald-400/50 dark:border-emerald-700/80 shadow-2xl text-xs w-92 max-w-[92vw] text-slate-800 dark:text-slate-300 transition-colors duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚡</span>
+              <span className="font-bold text-slate-900 dark:text-white text-sm">
+                Transition #{selectedTransition.id}: {selectedTransition.event_type}
+              </span>
+            </div>
+            <button
+              onClick={() => setSelectedTransition(null)}
+              className="text-slate-400 hover:text-slate-900 dark:hover:text-white px-1 font-bold"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300 font-mono">
+            <div>
+              <span className="text-slate-500 text-[10px] block">SOURCE PCI</span>
+              <span className="font-bold text-slate-900 dark:text-white">PCI {selectedTransition.from_pci ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">TARGET PCI</span>
+              <span className="font-bold text-cyan-600 dark:text-cyan-400">PCI {selectedTransition.to_pci ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">CARRIER CHANNEL</span>
+              <span className="text-slate-700 dark:text-slate-300">
+                {selectedTransition.from_channel && selectedTransition.to_channel
+                  ? `${selectedTransition.from_channel} ➔ ${selectedTransition.to_channel}`
+                  : (selectedTransition.to_channel ? `EARFCN ${selectedTransition.to_channel}` : 'Standard')}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">CONFIDENCE / EVIDENCE</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {selectedTransition.confidence_label || 'EMPIRICAL'}
+              </span>
+            </div>
+            {selectedTransition.delta_signal_db !== undefined && selectedTransition.delta_signal_db !== null && (
+              <div>
+                <span className="text-slate-500 text-[10px] block">SIGNAL DELTA</span>
+                <span className={`font-bold ${selectedTransition.delta_signal_db >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {selectedTransition.delta_signal_db > 0 ? '+' : ''}{selectedTransition.delta_signal_db} dB
+                </span>
+              </div>
+            )}
+            {selectedTransition.from_tac !== undefined && selectedTransition.to_tac !== undefined && (
+              <div>
+                <span className="text-slate-500 text-[10px] block">TAC MOBILITY</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {selectedTransition.from_tac} ➔ {selectedTransition.to_tac}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
+            {selectedTransition.classification_reason || selectedTransition.details}
+          </div>
+          <div className="mt-1 text-[10px] text-slate-500 flex justify-between">
+            <span>{selectedTransition.timestamp_raw}</span>
+            {selectedTransition.latitude && selectedTransition.longitude && (
+              <span>GPS: {selectedTransition.latitude.toFixed(5)}, {selectedTransition.longitude.toFixed(5)}</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Map Container */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
@@ -893,6 +1088,9 @@ export const MapView: React.FC<MapViewProps> = ({
               </div>
               <span className="text-slate-500 dark:text-slate-400 font-mono">&lt; 0 dB</span>
             </div>
+            <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">
+              <span className="font-semibold">Border:</span> Solid = Modem Measured | Dashed = 3GPP Estimated
+            </div>
           </div>
         )}
 
@@ -933,8 +1131,28 @@ export const MapView: React.FC<MapViewProps> = ({
             <span>Orange Corridor: Weak Coverage Zone</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 bg-red-500 rotate-45 border border-white inline-block" />
-            <span>Red Diamond: Handover Trigger</span>
+            <span className="w-2.5 h-2.5 bg-[#10b981] rotate-45 border border-white inline-block shadow-sm" />
+            <span>Green Diamond: Confirmed Handover</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-[#06b6d4] rotate-45 border border-white inline-block shadow-sm" />
+            <span>Cyan Diamond: Intra-Frequency (Same EARFCN)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-[#3b82f6] rotate-45 border border-white inline-block shadow-sm" />
+            <span>Blue Diamond: Inter-Frequency Carrier Switch</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-[#f59e0b] rotate-45 border border-white inline-block shadow-sm" />
+            <span>Amber Diamond: Inter-RAT Transition</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-[#eab308] rotate-45 border border-white inline-block shadow-sm" />
+            <span>Yellow Diamond: Cell Reselection</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-[#8b5cf6] rotate-45 border border-white inline-block shadow-sm" />
+            <span>Purple Diamond: Observed Cell Change</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[12px]">📡</span>
@@ -1007,9 +1225,25 @@ export const MapView: React.FC<MapViewProps> = ({
             </div>
             <div>
               <span className="text-slate-500 dark:text-slate-500 text-[10px] block">CINR / SINR</span>
-              <span className="font-bold text-amber-600 dark:text-amber-400">
-                {selectedPoint.cinr_db !== null ? `${selectedPoint.cinr_db} dB` : 'N/A'}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-amber-600 dark:text-amber-400">
+                  {selectedPoint.cinr_db !== null ? `${selectedPoint.cinr_db} dB` : 'N/A'}
+                </span>
+                {selectedPoint.sinr_source && selectedPoint.sinr_source !== 'UNAVAILABLE' && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                    selectedPoint.sinr_source === 'MEASURED'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                  }`}>
+                    {selectedPoint.sinr_source === 'MEASURED' ? 'MEASURED' : 'ESTIMATED ⓘ'}
+                  </span>
+                )}
+              </div>
+              {selectedPoint.sinr_source === 'ESTIMATED' && selectedPoint.implied_rssi_dbm !== null && selectedPoint.implied_rssi_dbm !== undefined && (
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-mono">
+                  Implied RSSI: {selectedPoint.implied_rssi_dbm} dBm
+                </span>
+              )}
             </div>
             <div>
               <span className="text-slate-500 dark:text-slate-500 text-[10px] block">HO TRIGGER</span>
@@ -1036,6 +1270,75 @@ export const MapView: React.FC<MapViewProps> = ({
             <span>Lat: {selectedPoint.latitude?.toFixed(5)}</span>
             <span>Lon: {selectedPoint.longitude?.toFixed(5)}</span>
             {selectedPoint.accuracy_m && <span>Acc: ±{Math.round(selectedPoint.accuracy_m)}m</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Handover & Transition Inspector Modal (Bottom Right) */}
+      {selectedTransition && !selectedPoint && !selectedSite && (
+        <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 rounded-xl border border-emerald-400/50 dark:border-emerald-700/80 shadow-2xl text-xs w-92 max-w-[92vw] text-slate-800 dark:text-slate-300 transition-colors duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚡</span>
+              <span className="font-bold text-slate-900 dark:text-white text-sm">
+                Transition #{selectedTransition.id}: {selectedTransition.event_type}
+              </span>
+            </div>
+            <button
+              onClick={() => setSelectedTransition(null)}
+              className="text-slate-400 hover:text-slate-900 dark:hover:text-white px-1 font-bold"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300 font-mono">
+            <div>
+              <span className="text-slate-500 text-[10px] block">SOURCE PCI</span>
+              <span className="font-bold text-slate-900 dark:text-white">PCI {selectedTransition.from_pci ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">TARGET PCI</span>
+              <span className="font-bold text-cyan-600 dark:text-cyan-400">PCI {selectedTransition.to_pci ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">CARRIER CHANNEL</span>
+              <span className="text-slate-700 dark:text-slate-300">
+                {selectedTransition.from_channel && selectedTransition.to_channel
+                  ? `${selectedTransition.from_channel} ➔ ${selectedTransition.to_channel}`
+                  : (selectedTransition.to_channel ? `EARFCN ${selectedTransition.to_channel}` : 'Standard')}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">CONFIDENCE / EVIDENCE</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {selectedTransition.confidence_label || 'EMPIRICAL'}
+              </span>
+            </div>
+            {selectedTransition.delta_signal_db !== undefined && selectedTransition.delta_signal_db !== null && (
+              <div>
+                <span className="text-slate-500 text-[10px] block">SIGNAL DELTA</span>
+                <span className={`font-bold ${selectedTransition.delta_signal_db >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {selectedTransition.delta_signal_db > 0 ? '+' : ''}{selectedTransition.delta_signal_db} dB
+                </span>
+              </div>
+            )}
+            {selectedTransition.from_tac !== undefined && selectedTransition.to_tac !== undefined && (
+              <div>
+                <span className="text-slate-500 text-[10px] block">TAC MOBILITY</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {selectedTransition.from_tac} ➔ {selectedTransition.to_tac}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
+            {selectedTransition.classification_reason || selectedTransition.details}
+          </div>
+          <div className="mt-1 text-[10px] text-slate-500 flex justify-between">
+            <span>{selectedTransition.timestamp_raw}</span>
+            {selectedTransition.latitude && selectedTransition.longitude && (
+              <span>GPS: {selectedTransition.latitude.toFixed(5)}, {selectedTransition.longitude.toFixed(5)}</span>
+            )}
           </div>
         </div>
       )}

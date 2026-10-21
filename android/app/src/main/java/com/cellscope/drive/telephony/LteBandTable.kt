@@ -232,7 +232,7 @@ object LteBandTable {
      * Resolves LTE frequency and duplex properties for an observed EARFCN according to 3GPP TS 36.101.
      */
     fun resolveEarfcn(earfcn: Int?): FrequencyResult? {
-        if (earfcn == null || earfcn <= 0) return null
+        if (earfcn == null || earfcn < 0) return null
 
         val band = BANDS.firstOrNull { earfcn in it.dlEarfcnRange }
             ?: return null

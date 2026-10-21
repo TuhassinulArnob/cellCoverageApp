@@ -20,6 +20,8 @@ from backend.app.core.schema import (
     ExtendedDatasetAnalysis,
     QoeTestRecord,
     QoePerformanceSummary,
+    HourlyProfile,
+    SummaryInsight,
 )
 from backend.app.core.rf_math import (
     rsrp_ie_to_dbm,
@@ -27,8 +29,9 @@ from backend.app.core.rf_math import (
     classify_rsrp,
     classify_rsrq,
     classify_cinr,
+    resolve_sinr_provenance,
 )
-from backend.app.services.parser import clean_numeric_value, extract_qoe_records
+from backend.app.services.parser import clean_numeric_value, extract_qoe_records, extract_cell_transition_records
 from backend.app.services.validator import validate_coordinates, validate_rf_ranges
 
 
@@ -90,6 +93,8 @@ def process_and_summarize_dataset(
     rsrp_col = mapping.get("rsrp")
     rsrq_col = mapping.get("rsrq")
     cinr_col = mapping.get("cinr")
+    sinr_source_col = mapping.get("sinr_source")
+    est_method_col = mapping.get("estimation_method")
     ho_col = mapping.get("handover_trigger")
     tac_col = mapping.get("tac")
     earfcn_col = mapping.get("earfcn")
@@ -136,9 +141,21 @@ def process_and_summarize_dataset(
     missing_rsrq_count = 0
     missing_cinr_count = 0
     missing_cell_count = 0
+    measured_sinr_count = 0
+    estimated_sinr_count = 0
+    unavailable_sinr_count = 0
     telemetry_gaps = 0
 
     parsed_timestamps: List[float] = []
+
+    # Detect if dataset contains any non-zero, genuine CINR measurements
+    has_seen_nonzero_cinr = False
+    if cinr_col and cinr_col in df.columns:
+        try:
+            numeric_cinrs = pd.to_numeric(df[cinr_col], errors='coerce').dropna()
+            has_seen_nonzero_cinr = bool(((numeric_cinrs != 0) & (numeric_cinrs != 99) & (numeric_cinrs != 0x7FFFFFFF) & (numeric_cinrs != -1)).any())
+        except Exception:
+            pass
 
     for idx, row in df.iterrows():
         # Timestamp
@@ -249,11 +266,69 @@ def process_and_summarize_dataset(
             missing_rsrq_count += 1
             rsrq_dist.unknown += 1
 
-        # CINR
+        # Network Gen
+        gen_val = infer_network_generation(net_type_val, earfcn_val, rsrp_dbm)
+        gen_dist[gen_val] = gen_dist.get(gen_val, 0) + 1
+
+        # CINR / SINR Resolution with strict provenance
         cinr_raw = clean_numeric_value(row[cinr_col]) if cinr_col else None
-        cinr_cls = classify_cinr(cinr_raw)
-        if cinr_raw is not None:
-            cinr_vals.append(cinr_raw)
+        csv_source = str(row[sinr_source_col]).strip().upper() if sinr_source_col and pd.notna(row[sinr_source_col]) else None
+        csv_method = str(row[est_method_col]).strip() if est_method_col and pd.notna(row[est_method_col]) else None
+
+        if csv_source in ("MEASURED", "ESTIMATED", "UNAVAILABLE"):
+            if csv_source == "UNAVAILABLE":
+                effective_sinr = None
+                sinr_source = "UNAVAILABLE"
+                est_method = csv_method
+                est_assumptions = "CSV telemetry indicated UNAVAILABLE SINR"
+                sinr_conf = None
+                qual_diag = get_sinr_qualitative_diagnostic(None, rsrq_db)
+                implied_rssi = rssi_val
+            elif csv_source == "ESTIMATED":
+                effective_sinr = cinr_raw
+                sinr_source = "ESTIMATED"
+                est_method = csv_method or "3GPP_TS_36_214_RSRQ_LOAD_MODEL"
+                est_assumptions = "Imported 3GPP estimated SINR"
+                sinr_conf = "CALIBRATED_ESTIMATE"
+                qual_diag = get_sinr_qualitative_diagnostic(cinr_raw, rsrq_db)
+                implied_rssi = calculate_implied_rssi(rsrp_dbm, rsrq_db) if (rsrp_dbm is not None and rsrq_db is not None) else rssi_val
+            else:  # MEASURED
+                effective_sinr = cinr_raw
+                sinr_source = "MEASURED"
+                est_method = csv_method or "ANDROID_RIL_RSSNR_MEASURED"
+                est_assumptions = "Direct modem baseband measurement"
+                sinr_conf = "HIGH"
+                qual_diag = get_sinr_qualitative_diagnostic(cinr_raw, rsrq_db)
+                implied_rssi = rssi_val
+        else:
+            (
+                effective_sinr,
+                sinr_source,
+                est_method,
+                est_assumptions,
+                sinr_conf,
+                qual_diag,
+                implied_rssi
+            ) = resolve_sinr_provenance(
+                raw_sinr=cinr_raw,
+                rsrp_dbm=rsrp_dbm,
+                rsrq_db=rsrq_db,
+                rssi_dbm=rssi_val,
+                bandwidth_khz=None,
+                rat=gen_val,
+                has_seen_nonzero_sinr=has_seen_nonzero_cinr
+            )
+
+        if sinr_source == "MEASURED":
+            measured_sinr_count += 1
+        elif sinr_source == "ESTIMATED":
+            estimated_sinr_count += 1
+        else:
+            unavailable_sinr_count += 1
+
+        cinr_cls = classify_cinr(effective_sinr)
+        if effective_sinr is not None:
+            cinr_vals.append(effective_sinr)
             if cinr_cls == "Excellent":
                 cinr_dist.excellent += 1
             elif cinr_cls == "Good":
@@ -265,10 +340,6 @@ def process_and_summarize_dataset(
         else:
             missing_cinr_count += 1
             cinr_dist.unknown += 1
-
-        # Network Gen
-        gen_val = infer_network_generation(net_type_val, earfcn_val, rsrp_dbm)
-        gen_dist[gen_val] = gen_dist.get(gen_val, 0) + 1
 
         # Handover trigger
         ho_val = clean_numeric_value(row[ho_col]) if ho_col else 0
@@ -288,7 +359,7 @@ def process_and_summarize_dataset(
             rsrp_dbm=rsrp_dbm,
             rsrq_ie=rsrq_ie,
             rsrq_db=rsrq_db,
-            cinr_db=cinr_raw,
+            cinr_db=effective_sinr,
             handover_trigger=ho_trig,
             has_valid_gps=is_valid_gps,
             rsrp_class=rsrp_cls,
@@ -306,6 +377,12 @@ def process_and_summarize_dataset(
             cqi=cqi_val,
             eci=eci_val,
             altitude_m=alt_val,
+            sinr_source=sinr_source,
+            estimation_method=est_method,
+            estimation_assumptions=est_assumptions,
+            sinr_confidence=sinr_conf,
+            qualitative_diagnostic=qual_diag,
+            implied_rssi_dbm=implied_rssi,
         )
         points.append(point)
 
@@ -434,6 +511,14 @@ def process_and_summarize_dataset(
         telemetry_gaps_count=telemetry_gaps,
         missing_values_summary=missing_values_summary,
         measurement_provenance=measurement_provenance,
+        sinr_provenance_summary={
+            "MEASURED": measured_sinr_count,
+            "ESTIMATED": estimated_sinr_count,
+            "UNAVAILABLE": unavailable_sinr_count
+        },
+        estimated_sinr_count=estimated_sinr_count,
+        measured_sinr_count=measured_sinr_count,
+        unavailable_sinr_count=unavailable_sinr_count,
     )
 
     # 4. Extract and summarize Active QoE tests
@@ -459,6 +544,102 @@ def process_and_summarize_dataset(
         dl_bytes_total = sum(r.download_bytes or 0 for r in completed)
         ul_bytes_total = sum(r.upload_bytes or 0 for r in completed)
 
+        rtt_p90 = round(float(np.percentile(ping_vals, 90)), 2) if ping_vals else None
+        rtt_p95 = round(float(np.percentile(ping_vals, 95)), 2) if ping_vals else None
+        med_dl = round(float(np.median(dl_vals)), 2) if dl_vals else None
+        med_ul = round(float(np.median(ul_vals)), 2) if ul_vals else None
+
+        # Hourly profiles
+        hourly_map: Dict[int, List[QoeTestRecord]] = {}
+        for r in completed:
+            hr: Optional[int] = None
+            if r.timestamp_raw:
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%H:%M:%S", "%Y%m%d_%H%M%S"):
+                    try:
+                        clean_ts = r.timestamp_raw.split(".")[0].split("+")[0].split("Z")[0].strip()
+                        dt = datetime.strptime(clean_ts, fmt)
+                        hr = dt.hour
+                        break
+                    except Exception:
+                        pass
+            if hr is None and r.timestamp_ms:
+                try:
+                    hr = datetime.fromtimestamp(r.timestamp_ms / 1000.0).hour
+                except Exception:
+                    pass
+            if hr is not None:
+                hourly_map.setdefault(hr, []).append(r)
+
+        hourly_profiles: List[HourlyProfile] = []
+        for hr in sorted(hourly_map.keys()):
+            hr_tests = hourly_map[hr]
+            h_dl = [t.download_mbps for t in hr_tests if t.download_mbps is not None]
+            h_ul = [t.upload_mbps for t in hr_tests if t.upload_mbps is not None]
+            h_pings = [t.ping_latency_ms for t in hr_tests if t.ping_latency_ms is not None]
+            hourly_profiles.append(
+                HourlyProfile(
+                    hour=hr,
+                    hour_label=f"{hr:02d}:00 - {hr:02d}:59",
+                    test_count=len(hr_tests),
+                    avg_download_mbps=round(float(np.mean(h_dl)), 2) if h_dl else None,
+                    min_download_mbps=round(float(min(h_dl)), 2) if h_dl else None,
+                    max_download_mbps=round(float(max(h_dl)), 2) if h_dl else None,
+                    avg_upload_mbps=round(float(np.mean(h_ul)), 2) if h_ul else None,
+                    min_upload_mbps=round(float(min(h_ul)), 2) if h_ul else None,
+                    max_upload_mbps=round(float(max(h_ul)), 2) if h_ul else None,
+                    avg_ping_ms=round(float(np.mean(h_pings)), 2) if h_pings else None,
+                )
+            )
+
+        # Genuine summary insights
+        insights: List[SummaryInsight] = []
+        if dl_vals:
+            max_dl = max(dl_vals)
+            min_dl = min(dl_vals)
+            avg_dl = np.mean(dl_vals)
+            insights.append(
+                SummaryInsight(
+                    category="Throughput Profile",
+                    title="Active Speed Performance",
+                    description=f"Observed peak downlink throughput of {max_dl:.2f} Mbps (mean: {avg_dl:.2f} Mbps, median: {med_dl:.2f} Mbps). Minimum throughput floor observed was {min_dl:.2f} Mbps.",
+                    severity="good" if avg_dl >= 10.0 else "warning",
+                    confidence="HIGH"
+                )
+            )
+        if ping_vals:
+            med_p = np.median(ping_vals)
+            insights.append(
+                SummaryInsight(
+                    category="Latency (RTT)",
+                    title="Round-Trip Time & Responsiveness",
+                    description=f"Median RTT is {med_p:.1f} ms with p95 upper-bound at {rtt_p95:.1f} ms. Latency profile reflects real-world mobile edge response.",
+                    severity="good" if med_p <= 60.0 else ("warning" if med_p <= 120.0 else "critical"),
+                    confidence="HIGH"
+                )
+            )
+        if loss_vals:
+            avg_loss = np.mean(loss_vals)
+            if avg_loss > 0.0:
+                insights.append(
+                    SummaryInsight(
+                        category="Packet Integrity",
+                        title="Observed Probe Loss",
+                        description=f"Active UDP/ICMP probing experienced an average of {avg_loss:.1f}% packet loss across tested segments.",
+                        severity="warning" if avg_loss < 5.0 else "critical",
+                        confidence="CALIBRATED"
+                    )
+                )
+            else:
+                insights.append(
+                    SummaryInsight(
+                        category="Packet Integrity",
+                        title="Zero Packet Loss Verified",
+                        description="All active latency probe sequences completed with 100% packet arrival (0.0% loss).",
+                        severity="good",
+                        confidence="CALIBRATED"
+                    )
+                )
+
         qoe_summary = QoePerformanceSummary(
             total_tests=len(qoe_records),
             completed_tests=len(completed),
@@ -470,16 +651,22 @@ def process_and_summarize_dataset(
             min_ping_ms=round(float(min(ping_vals)), 2) if ping_vals else None,
             max_ping_ms=round(float(max(ping_vals)), 2) if ping_vals else None,
             median_ping_ms=round(float(np.median(ping_vals)), 2) if ping_vals else None,
+            rtt_p90_ms=rtt_p90,
+            rtt_p95_ms=rtt_p95,
             avg_jitter_ms=round(float(np.mean(jitter_vals)), 2) if jitter_vals else None,
             avg_packet_loss_pct=round(float(np.mean(loss_vals)), 2) if loss_vals else None,
             avg_download_mbps=round(float(np.mean(dl_vals)), 2) if dl_vals else None,
+            median_download_mbps=med_dl,
             min_download_mbps=round(float(min(dl_vals)), 2) if dl_vals else None,
             max_download_mbps=round(float(max(dl_vals)), 2) if dl_vals else None,
             avg_upload_mbps=round(float(np.mean(ul_vals)), 2) if ul_vals else None,
+            median_upload_mbps=med_ul,
             min_upload_mbps=round(float(min(ul_vals)), 2) if ul_vals else None,
             max_upload_mbps=round(float(max(ul_vals)), 2) if ul_vals else None,
             total_download_bytes=dl_bytes_total,
             total_upload_bytes=ul_bytes_total,
+            hourly_profiles=hourly_profiles,
+            summary_insights=insights,
         )
 
     summary.qoe_summary = qoe_summary
@@ -490,7 +677,8 @@ def process_and_summarize_dataset(
 def compute_extended_analysis(
     summary: DatasetSummary,
     points: List[MeasurementPoint],
-    qoe_tests: Optional[List[QoeTestRecord]] = None
+    qoe_tests: Optional[List[QoeTestRecord]] = None,
+    raw_text: Optional[str] = None
 ) -> ExtendedDatasetAnalysis:
     """Computes transitions, explainable anomalies, service holes, and weak coverage segments."""
     transitions: List[CellTransitionEvent] = []
@@ -498,30 +686,98 @@ def compute_extended_analysis(
     anomalies: List[AnomalyEvent] = []
     weak_segments: List[WeakCoverageSegment] = []
 
+    # If raw_text contains recorded transition events section, parse directly
+    if raw_text and "# Cell Transitions" in raw_text:
+        raw_events = extract_cell_transition_records(raw_text)
+        if raw_events:
+            for ev in raw_events:
+                transitions.append(CellTransitionEvent(**ev))
+
+    has_preparsed_transitions = (len(transitions) > 0)
+
+    prev_point: Optional[MeasurementPoint] = None
     prev_pci: Optional[int] = None
     prev_rsrp: Optional[float] = None
     recent_pcis: List[Tuple[int, int]] = []  # (pci, index)
 
     # 1. Transitions & Anomaly detection pass
     for idx, p in enumerate(points):
-        # Transitions
-        if p.serving_cell_id is not None:
-            if prev_pci is not None and p.serving_cell_id != prev_pci:
+        # Derive transitions if not loaded from raw section
+        if not has_preparsed_transitions and p.serving_cell_id is not None:
+            if prev_point is not None and prev_point.serving_cell_id is not None and p.serving_cell_id != prev_point.serving_cell_id:
                 is_ho = (p.handover_trigger == 1)
+                from_pci = prev_point.serving_cell_id
+                to_pci = p.serving_cell_id
+                from_rat = prev_point.network_gen or "4G LTE"
+                to_rat = p.network_gen or "4G LTE"
+                from_ch = prev_point.earfcn
+                to_ch = p.earfcn
+                from_sig = prev_point.rsrp_dbm
+                to_sig = p.rsrp_dbm
+                delta_sig = round(to_sig - from_sig, 1) if (to_sig is not None and from_sig is not None) else None
+                from_tac = prev_point.tac
+                to_tac = p.tac
+
+                if from_rat != to_rat:
+                    ev_type = "INTER_RAT"
+                    conf_label = "CONFIRMED_RAT"
+                    reason = f"Radio access technology switched from {from_rat} to {to_rat}"
+                elif is_ho:
+                    ev_type = "CONFIRMED_HANDOVER"
+                    conf_label = "CONFIRMED"
+                    if from_ch is not None and to_ch is not None:
+                        if from_ch == to_ch:
+                            reason = f"Confirmed intra-frequency handover on carrier channel {to_ch} (Handover trigger asserted)"
+                        else:
+                            reason = f"Confirmed inter-frequency handover from channel {from_ch} to {to_ch} (Handover trigger asserted)"
+                    else:
+                        reason = "Confirmed serving-cell handover with Handover Trigger asserted"
+                elif from_ch is not None and to_ch is not None:
+                    tac_note = f" (TAC {from_tac} -> {to_tac})" if (from_tac is not None and to_tac is not None and from_tac != to_tac) else ""
+                    if from_ch == to_ch:
+                        ev_type = "INTRA_FREQ"
+                        conf_label = "HIGH"
+                        reason = f"Intra-frequency transition on carrier channel {to_ch}{tac_note}"
+                    else:
+                        ev_type = "INTER_FREQ"
+                        conf_label = "MEDIUM"
+                        reason = f"Inter-frequency carrier transition ({from_ch} -> {to_ch}){tac_note}"
+                else:
+                    tac_note = f" (TAC {from_tac} -> {to_tac})" if (from_tac is not None and to_tac is not None and from_tac != to_tac) else ""
+                    ev_type = "SERVING_CELL_CHANGE"
+                    conf_label = "EMPIRICAL"
+                    reason = f"Observed serving-cell change without explicit carrier channel telemetry{tac_note}"
+
                 transitions.append(
                     CellTransitionEvent(
                         id=len(transitions) + 1,
                         index=idx,
                         timestamp_raw=p.timestamp_raw,
-                        from_pci=prev_pci,
-                        to_pci=p.serving_cell_id,
                         latitude=p.latitude,
                         longitude=p.longitude,
-                        is_handover_trigger=is_ho,
-                        event_type="HANDOVER_TRIGGER" if is_ho else "SERVING_CELL_CHANGE",
-                        details=f"Switched from PCI {prev_pci} to PCI {p.serving_cell_id}{' (Handover Trigger flag set)' if is_ho else ''}",
+                        event_type=ev_type,
+                        from_rat=from_rat,
+                        to_rat=to_rat,
+                        from_pci=from_pci,
+                        to_pci=to_pci,
+                        from_channel=from_ch,
+                        to_channel=to_ch,
+                        from_cell_id=prev_point.eci,
+                        to_cell_id=p.eci,
+                        from_signal_dbm=from_sig,
+                        to_signal_dbm=to_sig,
+                        delta_signal_db=delta_sig,
+                        from_tac=from_tac,
+                        to_tac=to_tac,
+                        confidence_label=conf_label,
+                        classification_reason=reason,
+                        details=f"{'Confirmed Handover' if ev_type == 'CONFIRMED_HANDOVER' else 'Switched'} from PCI {from_pci} to PCI {to_pci}: {reason}",
+                        is_handover_trigger=(ev_type == "CONFIRMED_HANDOVER"),
                     )
                 )
+
+        if p.serving_cell_id is not None:
+            if prev_pci is not None and p.serving_cell_id != prev_pci:
 
                 # Ping-pong check: did we switch back to a cell we were on within 10 samples?
                 past_matches = [past_idx for past_pci, past_idx in recent_pcis if past_pci == p.serving_cell_id]
@@ -547,6 +803,7 @@ def compute_extended_analysis(
             if len(recent_pcis) > 20:
                 recent_pcis.pop(0)
             prev_pci = p.serving_cell_id
+            prev_point = p
 
         # Pilot pollution / severe interference: Good RSRP but terrible RSRQ or CINR
         if p.rsrp_dbm is not None and p.rsrp_dbm >= -95:

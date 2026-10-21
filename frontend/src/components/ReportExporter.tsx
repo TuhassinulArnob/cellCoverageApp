@@ -161,6 +161,14 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ summary }) => {
                 <div className="flex justify-between"><span className="text-sky-600 dark:text-sky-400 font-medium">Good (13 to 20):</span> <span className="text-slate-800 dark:text-slate-200">{summary.cinr_distribution.good}</span></div>
                 <div className="flex justify-between"><span className="text-amber-600 dark:text-amber-400 font-medium">Fair (0 to 13):</span> <span className="text-slate-800 dark:text-slate-200">{summary.cinr_distribution.fair}</span></div>
                 <div className="flex justify-between"><span className="text-rose-600 dark:text-rose-400 font-medium">Poor (&lt;0 dB):</span> <span className="text-slate-800 dark:text-slate-200">{summary.cinr_distribution.poor}</span></div>
+                <div className="pt-1.5 mt-1 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">Provenance: </span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{summary.measured_sinr_count ?? 0} Meas</span>
+                  <span> • </span>
+                  <span className="text-amber-600 dark:text-amber-400 font-semibold">{summary.estimated_sinr_count ?? 0} Est</span>
+                  <span> • </span>
+                  <span className="text-slate-400">{summary.unavailable_sinr_count ?? 0} Unavail</span>
+                </div>
               </div>
             </div>
           </div>

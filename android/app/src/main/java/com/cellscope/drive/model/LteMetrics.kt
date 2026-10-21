@@ -37,8 +37,22 @@ data class LteMetrics(
     val channelType: String? = null,
     val primarySignalDbm: Int? = null,
     val signalMetricType: String? = null,
-    val secondarySignalDb: Double? = null
+    val secondarySignalDb: Double? = null,
+    val sinrSource: String = "UNAVAILABLE", // MEASURED, ESTIMATED, UNAVAILABLE
+    val estimationMethod: String? = null,
+    val estimationAssumptions: String? = null,
+    val sinrConfidence: String? = null,
+    val qualitativeDiagnostic: String? = null,
+    val impliedRssiDbm: Double? = null
 ) {
+    val isMeasuredSinr: Boolean
+        get() = sinrSource == "MEASURED"
+
+    val isEstimatedSinr: Boolean
+        get() = sinrSource == "ESTIMATED"
+
+    val isSinrAvailable: Boolean
+        get() = sinrDb != null && sinrSource != "UNAVAILABLE"
     val is5gActive: Boolean
         get() = networkType == "5G_NR" || nrState == "SA" || nrState == "NSA" || networkGen == NetworkGeneration.GEN_5G
 

@@ -32,7 +32,13 @@ CANONICAL_FIELD_PATTERNS = {
         r"^serving\s+cell\s+rsrq\s*$", r"^rsrq\s*$", r"^serving_cell_rsrq\s*$", r"^serving\s+cell\s+rsrpq\s*$"
     ],
     "cinr": [
-        r"^serving\s+cell\s+cinr\s*$", r"^cinr\s*$", r"^sinr\s*$", r"^serving\s+cell\s+cinr-1\s*$"
+        r"^serving\s+cell\s+cinr\s*$", r"^cinr\s*$", r"^sinr\s*$", r"^serving\s+cell\s+cinr-1\s*$", r"^sinr\s*\(\s*db\s*\)\s*$", r"^cinr\s*\(\s*db\s*\)\s*$"
+    ],
+    "sinr_source": [
+        r"^sinr_source\s*$", r"^sinr\s+source\s*$", r"^cinr_source\s*$"
+    ],
+    "estimation_method": [
+        r"^estimation_method\s*$", r"^sinr_method\s*$"
     ],
     "handover_trigger": [
         r"^handover\s+trigger\s*$", r"^handover_trigger\s*$", r"^ho_trigger\s*$"
@@ -435,5 +441,144 @@ def extract_qoe_records(
                         "classification": None,
                         "data_provenance": "MEASURED"
                     })
+
+    return records
+
+
+def extract_cell_transition_records(raw_text: str) -> List[Dict[str, Any]]:
+    """
+    Extracts recorded mobility and cell transition events from multi-section exports
+    containing '# Cell Transitions (Mobility & Handover) Section'.
+    """
+    import csv
+
+    records: List[Dict[str, Any]] = []
+    lines = raw_text.splitlines()
+    trans_lines: List[str] = []
+    in_trans = False
+
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            lower = s.lower()
+            if "cell transition" in lower or "mobility & handover" in lower:
+                in_trans = True
+                continue
+            elif in_trans:
+                break
+        elif in_trans:
+            trans_lines.append(line)
+
+    if not trans_lines:
+        return []
+
+    reader = csv.DictReader(io.StringIO("\n".join(trans_lines)))
+    for idx, row in enumerate(reader):
+        if not row:
+            continue
+        ts_raw = str(row.get("Timestamp") or row.get("timestamp") or "").strip()
+        if not ts_raw or "MALFORMED" in ts_raw.upper():
+            continue
+
+        lat = clean_numeric_value(row.get("Latitude") or row.get("latitude"))
+        lon = clean_numeric_value(row.get("Longitude") or row.get("longitude"))
+
+        raw_ev = str(row.get("Event Type") or row.get("event_type") or "OBSERVED_TRANSITION").strip().upper()
+        # Normalize legacy INTRA_LTE -> INTRA_FREQ
+        if raw_ev == "INTRA_LTE":
+            ev_type = "INTRA_FREQ"
+        else:
+            ev_type = raw_ev
+
+        from_rat = row.get("From RAT") or row.get("from_rat")
+        to_rat = row.get("To RAT") or row.get("to_rat")
+
+        from_pci = clean_numeric_value(row.get("From PCI") or row.get("from_pci"))
+        to_pci = clean_numeric_value(row.get("To PCI") or row.get("to_pci"))
+
+        from_ch = clean_numeric_value(row.get("From Channel") or row.get("from_channel"))
+        to_ch = clean_numeric_value(row.get("To Channel") or row.get("to_channel"))
+
+        from_cid = clean_numeric_value(row.get("From Cell ID") or row.get("from_cell_id"))
+        to_cid = clean_numeric_value(row.get("To Cell ID") or row.get("to_cell_id"))
+
+        from_sig = clean_numeric_value(row.get("From Signal (dBm)") or row.get("from_signal_dbm"))
+        to_sig = clean_numeric_value(row.get("To Signal (dBm)") or row.get("to_signal_dbm"))
+        delta_sig = round(to_sig - from_sig, 1) if (to_sig is not None and from_sig is not None) else None
+
+        from_tac = clean_numeric_value(row.get("From TAC/LAC") or row.get("from_tac"))
+        to_tac = clean_numeric_value(row.get("To TAC/LAC") or row.get("to_tac"))
+
+        conf_score = clean_numeric_value(row.get("Confidence Score") or row.get("confidence_score"))
+        details = str(row.get("Details") or row.get("details") or "").strip()
+
+        # Grounded handover evidence check (TAC change or cell change alone is NOT a confirmed handover)
+        is_tac_change = (from_tac is not None and to_tac is not None and from_tac != to_tac)
+        is_explicit_confirmed = (raw_ev == "CONFIRMED_HANDOVER")
+
+        # Evidence-based confidence classification
+        if is_explicit_confirmed:
+            ev_type = "CONFIRMED_HANDOVER"
+            conf_label = "CONFIRMED"
+            reason = details if details else "Direct confirmed handover event"
+        elif ev_type in ("INTRA_FREQ", "INTRA_FREQUENCY"):
+            ev_type = "INTRA_FREQ"
+            conf_label = "HIGH"
+            reason = details if details else "Intra-frequency transition on matching carrier frequency"
+        elif ev_type in ("INTER_FREQ", "INTER_FREQUENCY"):
+            ev_type = "INTER_FREQ"
+            conf_label = "MEDIUM"
+            reason = details if details else "Inter-frequency carrier transition on distinct channel frequencies"
+        elif ev_type in ("INTER_RAT", "RAT_MOBILITY"):
+            ev_type = "INTER_RAT"
+            conf_label = "CONFIRMED_RAT"
+            reason = details if details else "Radio access technology change"
+        elif ev_type == "CELL_RESELECTION":
+            ev_type = "CELL_RESELECTION"
+            conf_label = "MEDIUM"
+            reason = details if details else "Cell reselection transition"
+        elif "PING_PONG" in ev_type:
+            ev_type = "PING_PONG"
+            conf_label = "HIGH"
+            reason = details if details else "Rapid return to previously serving cell"
+        elif ev_type == "SIGNAL_LOSS":
+            ev_type = "SIGNAL_LOSS"
+            conf_label = "HIGH"
+            reason = details if details else "Serving cell signal loss"
+        else:
+            ev_type = "OBSERVED_CELL_CHANGE"
+            conf_label = "EMPIRICAL"
+            reason = details if details else "Observed serving-cell change"
+
+        is_ho = (ev_type == "CONFIRMED_HANDOVER")
+
+        records.append({
+            "id": idx + 1,
+            "index": idx,
+            "timestamp_raw": ts_raw,
+            "latitude": lat,
+            "longitude": lon,
+            "event_type": ev_type,
+            "from_rat": str(from_rat).strip() if from_rat else None,
+            "to_rat": str(to_rat).strip() if to_rat else None,
+            "from_pci": int(from_pci) if from_pci is not None else None,
+            "to_pci": int(to_pci) if to_pci is not None else None,
+            "from_channel": int(from_ch) if from_ch is not None else None,
+            "to_channel": int(to_ch) if to_ch is not None else None,
+            "from_cell_id": int(from_cid) if from_cid is not None else None,
+            "to_cell_id": int(to_cid) if to_cid is not None else None,
+            "from_signal_dbm": from_sig,
+            "to_signal_dbm": to_sig,
+            "delta_signal_db": delta_sig,
+            "from_tac": int(from_tac) if from_tac is not None else None,
+            "to_tac": int(to_tac) if to_tac is not None else None,
+            "confidence_label": conf_label,
+            "confidence_score": conf_score,
+            "classification_reason": reason,
+            "details": details,
+            "is_handover_trigger": is_ho,
+        })
 
     return records

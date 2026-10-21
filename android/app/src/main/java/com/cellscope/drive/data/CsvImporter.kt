@@ -96,7 +96,9 @@ object CsvImporter {
         "channelType" to listOf(Pattern.compile("^channel\\s+type\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^channel_type\\s*$", Pattern.CASE_INSENSITIVE)),
         "primarySignalDbm" to listOf(Pattern.compile("^primary\\s+signal\\s*\\(\\s*dbm\\s*\\)\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^primary\\s+signal\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^primary_signal_dbm\\s*$", Pattern.CASE_INSENSITIVE)),
         "signalMetricType" to listOf(Pattern.compile("^signal\\s+metric\\s+type\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^signal_metric_type\\s*$", Pattern.CASE_INSENSITIVE)),
-        "secondarySignalDb" to listOf(Pattern.compile("^secondary\\s+signal\\s*\\(\\s*db\\s*\\)\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^secondary\\s+signal\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^secondary_signal_db\\s*$", Pattern.CASE_INSENSITIVE))
+        "secondarySignalDb" to listOf(Pattern.compile("^secondary\\s+signal\\s*\\(\\s*db\\s*\\)\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^secondary\\s+signal\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^secondary_signal_db\\s*$", Pattern.CASE_INSENSITIVE)),
+        "sinrSource" to listOf(Pattern.compile("^sinr\\s+source\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^sinr_source\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^cinr_source\\s*$", Pattern.CASE_INSENSITIVE)),
+        "estimationMethod" to listOf(Pattern.compile("^estimation\\s+method\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^estimation_method\\s*$", Pattern.CASE_INSENSITIVE), Pattern.compile("^sinr_method\\s*$", Pattern.CASE_INSENSITIVE))
     )
 
     suspend fun validateCsv(
@@ -514,6 +516,7 @@ object CsvImporter {
         var lastPci: Int? = null
         var lastTac: Int? = null
         var lastRsrp: Int? = null
+        var lastEarfcn: Int? = null
 
         var firstTsMs = System.currentTimeMillis()
         var lastTsMs = firstTsMs
@@ -648,6 +651,8 @@ object CsvImporter {
                     val primSigIdx = colMap["primarySignalDbm"]
                     val sigMetricTypeIdx = colMap["signalMetricType"]
                     val secSigIdx = colMap["secondarySignalDb"]
+                    val sinrSourceIdx = colMap["sinrSource"]
+                    val estMethodIdx = colMap["estimationMethod"]
 
                     val rawTs = timeIdx?.let { if (it < tokens.size) tokens[it] else null }
                     val tsMs = parseTimestampToMs(rawTs) ?: (firstTsMs + parsedTelemetry.size * 1000L)
@@ -798,19 +803,54 @@ object CsvImporter {
                         channelType = channelType,
                         primarySignalDbm = primarySignalDbm,
                         signalMetricType = signalMetricType,
-                        secondarySignalDb = secondarySignalDb
+                        secondarySignalDb = secondarySignalDb,
+                        sinrSource = run {
+                            val explicit = sinrSourceIdx?.let { if (it < tokens.size) tokens[it].takeIf { s -> s.isNotBlank() } else null }
+                            if (explicit != null) explicit
+                            else if (cinr != null && cinr != 0.0) "MEASURED"
+                            else if (rsrp != null && rsrq != null && rsrp in -140..-44 && rsrq in -25..-3) "ESTIMATED"
+                            else "UNAVAILABLE"
+                        },
+                        estimationMethod = run {
+                            val explicitSrc = sinrSourceIdx?.let { if (it < tokens.size) tokens[it].takeIf { s -> s.isNotBlank() } else null }
+                            val explicitMethod = estMethodIdx?.let { if (it < tokens.size) tokens[it].takeIf { s -> s.isNotBlank() } else null }
+                            if (explicitMethod != null) explicitMethod
+                            else if (explicitSrc == "ESTIMATED" || (explicitSrc == null && (cinr == null || cinr == 0.0) && rsrp != null && rsrq != null && rsrp in -140..-44 && rsrq in -25..-3)) "3GPP_TS_36_214_RSRQ_LOAD_MODEL"
+                            else if (cinr != null && cinr != 0.0) "CSV_SURVEY_RECORD"
+                            else null
+                        },
+                        qualitativeDiagnostic = if (cinr != null) "Imported survey measurement ($cinr dB)" else "SINR unavailable in survey file"
                     )
                     parsedTelemetry.add(entity)
 
                     // Reconstruct transition if PCI changes
                     if (pci != null && lastPci != null && pci != lastPci) {
                         val isTacChange = lastTac != null && tac != null && lastTac != tac
+                        val isIntraFreq = (lastEarfcn != null && earfcn != null && lastEarfcn == earfcn)
+                        val isInterFreq = (lastEarfcn != null && earfcn != null && lastEarfcn != earfcn)
+                        val isMoving = speed != null && speed >= 2.5f
+                        val isSignalDrop = (lastRsrp ?: -90) < -115
+                        val isStationary = speed != null && speed < 2.5f
+                        val isExplicitConfirmed = (hoTrig == 1 || transType == "CONFIRMED_HANDOVER")
                         val tType = when {
-                            isTacChange -> "CONFIRMED_HANDOVER"
-                            hoTrig == 1 -> "CONFIRMED_HANDOVER"
-                            speed != null && speed < 2.5f -> "CELL_RESELECTION"
-                            (lastRsrp ?: -90) < -115 -> "SIGNAL_LOSS"
+                            isExplicitConfirmed -> "CONFIRMED_HANDOVER"
+                            isSignalDrop -> "SIGNAL_LOSS"
+                            isStationary -> "CELL_RESELECTION"
+                            isInterFreq -> "INTER_FREQ"
+                            isIntraFreq -> "INTRA_FREQ"
                             else -> "OBSERVED_TRANSITION"
+                        }
+                        val conf = if (isExplicitConfirmed) 0.95f else 0.85f
+                        val tacNote = if (isTacChange) " (TAC $lastTac -> $tac)" else ""
+                        val detail = when {
+                            isExplicitConfirmed && isIntraFreq -> "Confirmed intra-frequency handover on Ch $earfcn (PCI: $lastPci -> $pci)$tacNote"
+                            isExplicitConfirmed && isInterFreq -> "Confirmed inter-frequency handover: Ch $lastEarfcn -> $earfcn (PCI: $lastPci -> $pci)$tacNote"
+                            isExplicitConfirmed -> "Confirmed handover: PCI $lastPci -> $pci$tacNote"
+                            tType == "SIGNAL_LOSS" -> "Signal drop before transition to PCI $pci$tacNote"
+                            tType == "CELL_RESELECTION" -> "Cell reselection while stationary: PCI $lastPci -> $pci$tacNote"
+                            tType == "INTER_FREQ" -> "Inter-frequency transition: Ch $lastEarfcn -> $earfcn (PCI: $lastPci -> $pci)$tacNote"
+                            tType == "INTRA_FREQ" -> "Intra-frequency transition on Ch $earfcn (PCI: $lastPci -> $pci)$tacNote"
+                            else -> "Observed transition from PCI $lastPci to PCI $pci"
                         }
                         reconstructedTransitions.add(
                             CellTransitionEntity(
@@ -826,15 +866,18 @@ object CsvImporter {
                                 fromTac = lastTac,
                                 toTac = tac,
                                 eventType = tType,
-                                confidenceScore = if (tType == "CONFIRMED_HANDOVER") 0.95f else 0.75f,
-                                details = "Transition from PCI $lastPci to PCI $pci ($tType)"
+                                confidenceScore = conf,
+                                details = detail,
+                                fromChannel = lastEarfcn,
+                                toChannel = earfcn
                             )
                         )
                     }
                     if (pci != null) {
                         lastPci = pci
-                        lastTac = tac
+                        if (tac != null) lastTac = tac
                         lastRsrp = rsrp
+                        if (earfcn != null) lastEarfcn = earfcn
                     }
                 }
 
@@ -921,7 +964,7 @@ object CsvImporter {
                         val tsMs = parseTimestampToMs(tsIso) ?: System.currentTimeMillis()
                         val lat = getVal("latitude")?.toDoubleOrNull()
                         val lon = getVal("longitude")?.toDoubleOrNull()
-                        val evType = getVal("event type") ?: getVal("event_type") ?: "OBSERVED_TRANSITION"
+                        val rawEv = getVal("event type") ?: getVal("event_type") ?: "OBSERVED_TRANSITION"
                         val fRat = getVal("from rat")
                         val tRat = getVal("to rat")
                         val fPci = getVal("from pci")?.toIntOrNull()
@@ -934,8 +977,13 @@ object CsvImporter {
                         val tRsrp = getVal("to signal (dbm)")?.toIntOrNull()
                         val fTac = getVal("from tac/lac")?.toIntOrNull()
                         val tTac = getVal("to tac/lac")?.toIntOrNull()
-                        val conf = getVal("confidence score")?.toFloatOrNull() ?: 0.85f
-                        val det = getVal("details") ?: "Cell transition $evType"
+                        val det = getVal("details") ?: "Cell transition $rawEv"
+
+                        val isTacChange = (fTac != null && tTac != null && fTac != tTac)
+                        val isExplicitConfirmed = rawEv.contains("CONFIRMED", ignoreCase = true) || det.contains("confirmed", ignoreCase = true)
+                        val isConfirmed = isTacChange || isExplicitConfirmed
+                        val evType = if (isConfirmed) "CONFIRMED_HANDOVER" else rawEv
+                        val conf = if (isTacChange || isExplicitConfirmed) 0.95f else (getVal("confidence score")?.toFloatOrNull() ?: 0.85f)
 
                         parsedExplicitTransitions.add(
                             CellTransitionEntity(

@@ -233,8 +233,9 @@ class TelephonyCollector(
                 }
             }
 
-            // Authoritatively classify serving status across all scanned cells
-            val observedCells = ServingCellClassifier.classify(rawCandidates)
+            // Authoritatively classify serving status across all scanned cells, prioritizing active data SIM's registered PLMN
+            val preferredPlmn = operatorNumeric?.trim()?.replace("-", "")
+            val observedCells = ServingCellClassifier.classify(rawCandidates, preferredPlmn = preferredPlmn)
 
             // Primary serving cell is the single authoritative PCell
             val primaryServingCell = observedCells.firstOrNull { it.servingStatus == ServingStatus.PRIMARY_SERVING }
@@ -323,7 +324,13 @@ class TelephonyCollector(
                 channelType = primaryServingCell?.channelType,
                 primarySignalDbm = primaryServingCell?.primarySignalDbm,
                 signalMetricType = primaryServingCell?.signalMetricType,
-                secondarySignalDb = primaryServingCell?.secondarySignalDb
+                secondarySignalDb = primaryServingCell?.secondarySignalDb,
+                sinrSource = primaryServingCell?.sinrSource ?: "UNAVAILABLE",
+                estimationMethod = primaryServingCell?.estimationMethod,
+                estimationAssumptions = primaryServingCell?.estimationAssumptions,
+                sinrConfidence = primaryServingCell?.sinrConfidence,
+                qualitativeDiagnostic = primaryServingCell?.qualitativeDiagnostic,
+                impliedRssiDbm = primaryServingCell?.impliedRssiDbm
             )
 
             latestMetrics = metrics
@@ -372,7 +379,7 @@ class TelephonyCollector(
                 val alpha = BangladeshMccMnc.resolveOperatorName(cellPlmn, cellAlpha)
                 Pair(cellPlmn, alpha)
             } else {
-                Pair(null, cellAlpha ?: "Unknown (Unbroadcast PLMN)")
+                Pair(null, cellAlpha ?: "Unknown / Unverified (Unbroadcast PLMN)")
             }
         }
     }
@@ -436,18 +443,23 @@ class TelephonyCollector(
                     simOperatorName = operatorName
                 )
 
-                // RSSNR in LTE is given in tenths of a dB (-200..300 = -20.0 to 30.0 dB)
-                val sinr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val rawRssnr = signal.rssnr
-                    if (rawRssnr in -200..300) {
-                        if (rawRssnr != 0) {
-                            hasSeenNonZeroRssnr = true
-                            rawRssnr / 10.0
-                        } else {
-                            if (hasSeenNonZeroRssnr) 0.0 else null
-                        }
-                    } else null
+                val rawRssnr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    signal.rssnr.takeIf { !SinrDiagnostics.UNAVAILABLE_SENTINELS.contains(it) }
                 } else null
+
+                if (rawRssnr != null && rawRssnr != 0) {
+                    hasSeenNonZeroRssnr = true
+                }
+
+                val sinrProv = SinrDiagnostics.resolveLteSinr(
+                    rawRssnr = rawRssnr,
+                    rsrpDbm = rsrp,
+                    rsrqDb = rsrq,
+                    rssiDbm = rssi,
+                    bandwidthKhz = bandwidth,
+                    hasSeenNonZeroRssnr = hasSeenNonZeroRssnr,
+                    timestampMs = timestampMs
+                )
 
                 val cqi = signal.cqi.takeIf { it in 1..15 }
                 val ta = signal.timingAdvance.takeIf { it in 0..1282 }
@@ -461,7 +473,7 @@ class TelephonyCollector(
                     rsrpDbm = rsrp,
                     rsrqDb = rsrq,
                     rssiDbm = rssi,
-                    sinrDb = sinr,
+                    sinrDb = sinrProv.sinrDb,
                     cqi = cqi,
                     timingAdvance = ta,
                     isRegistered = info.isRegistered,
@@ -475,7 +487,13 @@ class TelephonyCollector(
                     channelType = "EARFCN",
                     primarySignalDbm = rsrp,
                     signalMetricType = "LTE_RSRP",
-                    secondarySignalDb = rsrq?.toDouble() ?: sinr
+                    secondarySignalDb = rsrq?.toDouble() ?: sinrProv.sinrDb,
+                    sinrSource = sinrProv.source,
+                    estimationMethod = sinrProv.estimationMethod,
+                    estimationAssumptions = sinrProv.estimationAssumptions,
+                    sinrConfidence = sinrProv.confidence,
+                    qualitativeDiagnostic = sinrProv.qualitativeDiagnostic,
+                    impliedRssiDbm = sinrProv.impliedRssiDbm
                 )
             }
 
@@ -508,6 +526,13 @@ class TelephonyCollector(
                     simOperatorName = operatorName
                 )
 
+                val nrSinrProv = SinrDiagnostics.resolveNrSinr(
+                    ssSinr = ssSinr,
+                    csiSinr = csiSinr,
+                    ssRsrp = ssRsrp,
+                    ssRsrq = ssRsrq
+                )
+
                 return RawCellCandidate(
                     pci = pci,
                     tac = tac,
@@ -515,7 +540,7 @@ class TelephonyCollector(
                     nrArfcn = nrArfcn,
                     rsrpDbm = ssRsrp ?: csiRsrp,
                     rsrqDb = ssRsrq ?: csiRsrq,
-                    sinrDb = ssSinr ?: csiSinr,
+                    sinrDb = nrSinrProv.sinrDb,
                     csiRsrpDbm = csiRsrp,
                     csiRsrqDb = csiRsrq,
                     csiSinrDb = csiSinr,
@@ -530,7 +555,13 @@ class TelephonyCollector(
                     channelType = "NR_ARFCN",
                     primarySignalDbm = ssRsrp ?: csiRsrp,
                     signalMetricType = "NR_SS_RSRP",
-                    secondarySignalDb = ssRsrq?.toDouble() ?: csiRsrq?.toDouble()
+                    secondarySignalDb = ssRsrq?.toDouble() ?: csiRsrq?.toDouble(),
+                    sinrSource = nrSinrProv.source,
+                    estimationMethod = nrSinrProv.estimationMethod,
+                    estimationAssumptions = nrSinrProv.estimationAssumptions,
+                    sinrConfidence = nrSinrProv.confidence,
+                    qualitativeDiagnostic = nrSinrProv.qualitativeDiagnostic,
+                    impliedRssiDbm = null
                 )
             }
 
@@ -667,7 +698,7 @@ class TelephonyCollector(
         val secondaryCount = cells.count { it.servingStatus == ServingStatus.SECONDARY_SERVING }
         val unconfirmedCount = cells.count { it.servingStatus == ServingStatus.SERVING_UNCONFIRMED }
         val neighborCount = cells.count { it.servingStatus == ServingStatus.NEIGHBOR }
-        val hasSinr = cells.any { it.sinrDb != null }
+        val hasSinr = cells.any { it.sinrDb != null && it.sinrSource == SinrDiagnostics.SOURCE_MEASURED }
         val hasTa = cells.any { it.timingAdvance != null }
         val nrCells = cells.filter { it.networkType == "5G_NR" }
         val primaryIsNr = cells.any { it.servingStatus == ServingStatus.PRIMARY_SERVING && it.networkType == "5G_NR" }

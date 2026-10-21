@@ -16,7 +16,10 @@ class HandoverAnalyzerTest {
         earfcn: Int? = 1600,
         rsrp: Int? = -85,
         speedKmh: Float = 30f,
-        timeMs: Long = 1000L * id
+        timeMs: Long = 1000L * id,
+        handoverTrigger: Int = 0,
+        transitionType: String? = null,
+        dataActivityState: String? = null
     ): LteMeasurementEntity {
         return LteMeasurementEntity(
             id = id,
@@ -41,7 +44,9 @@ class HandoverAnalyzerTest {
             cqi = 12,
             timingAdvance = 2,
             isServing = true,
-            handoverTrigger = 0
+            handoverTrigger = handoverTrigger,
+            transitionType = transitionType,
+            dataActivityState = dataActivityState
         )
     }
 
@@ -67,7 +72,7 @@ class HandoverAnalyzerTest {
         val samples = listOf(
             createSample(1, pci = 288, tac = 100, rsrp = -80, speedKmh = 35f),
             createSample(2, pci = 288, tac = 100, rsrp = -82, speedKmh = 35f),
-            createSample(3, pci = 290, tac = 200, rsrp = -86, speedKmh = 35f), // Inter-TAC change -> CONFIRMED_HANDOVER
+            createSample(3, pci = 290, tac = 200, rsrp = -86, speedKmh = 35f, handoverTrigger = 1), // Explicit trigger -> CONFIRMED_HANDOVER
             createSample(4, pci = 290, tac = 200, rsrp = -118, speedKmh = 0f), // Drops below -115 dBm
             createSample(5, pci = 292, tac = 200, rsrp = -88, speedKmh = 0f)  // Stationary & low rsrp drop -> SIGNAL_LOSS
         )
@@ -177,5 +182,95 @@ class HandoverAnalyzerTest {
         assertEquals(1, summary.totalTransitions)
         assertEquals(101, summary.transitionEvents[0].fromPci)
         assertEquals(102, summary.transitionEvents[0].toPci)
+    }
+
+    @Test
+    fun testExplicitHandoverTriggerProducesConfirmedHandover() {
+        val samples = listOf(
+            createSample(1, pci = 101, earfcn = 1800, rsrp = -82, speedKmh = 25f),
+            createSample(2, pci = 101, earfcn = 1800, rsrp = -84, speedKmh = 25f),
+            createSample(3, pci = 228, earfcn = 1800, rsrp = -80, speedKmh = 25f, handoverTrigger = 1)
+        )
+
+        val summary = HandoverAnalyzer.analyzeTransitions(1L, samples, 1000.0)
+        assertEquals(1, summary.totalTransitions)
+        assertEquals(1, summary.confirmedHandovers)
+        assertEquals(1, summary.intraFrequencyTransitions)
+        assertEquals("CONFIRMED_HANDOVER", summary.transitionEvents[0].eventType)
+        assertEquals(0.95f, summary.transitionEvents[0].confidenceScore, 0.01f)
+        assertTrue(summary.transitionEvents[0].details.contains("Confirmed intra-frequency handover on Ch 1800"))
+        assertTrue(summary.transitionEvents[0].details.contains("trigger asserted"))
+    }
+
+    @Test
+    fun testActiveConnectedDataContinuityProducesConfirmedHandover() {
+        val samples = listOf(
+            createSample(1, pci = 101, earfcn = 1800, rsrp = -82, speedKmh = 35f, dataActivityState = "DATAINOUT"),
+            createSample(2, pci = 101, earfcn = 1800, rsrp = -84, speedKmh = 35f, dataActivityState = "DATAINOUT"),
+            createSample(3, pci = 102, earfcn = 1800, rsrp = -79, speedKmh = 35f, dataActivityState = "DATAINOUT")
+        )
+
+        val summary = HandoverAnalyzer.analyzeTransitions(1L, samples, 1000.0)
+        assertEquals(1, summary.totalTransitions)
+        assertEquals(1, summary.confirmedHandovers)
+        assertEquals("CONFIRMED_HANDOVER", summary.transitionEvents[0].eventType)
+        assertEquals(0.90f, summary.transitionEvents[0].confidenceScore, 0.01f)
+        assertTrue(summary.transitionEvents[0].details.contains("Confirmed intra-frequency handover"))
+    }
+
+    @Test
+    fun testUnconfirmedServingCellChangeRemainsIntraFrequencyTransition() {
+        // Device moving on same channel without explicit trigger or data activity -> INTRA_FREQ
+        val samples = listOf(
+            createSample(1, pci = 101, earfcn = 1800, rsrp = -85, speedKmh = 30f),
+            createSample(2, pci = 102, earfcn = 1800, rsrp = -83, speedKmh = 30f)
+        )
+
+        val summary = HandoverAnalyzer.analyzeTransitions(1L, samples, 500.0)
+        assertEquals(1, summary.totalTransitions)
+        assertEquals(0, summary.confirmedHandovers)
+        assertEquals(1, summary.observedTransitions)
+        assertEquals(1, summary.intraFrequencyTransitions)
+        assertEquals("INTRA_FREQ", summary.transitionEvents[0].eventType)
+        assertEquals(0.60f, summary.transitionEvents[0].confidenceScore, 0.01f)
+    }
+
+    @Test
+    fun testInterFrequencyTransitionClassification() {
+        val samples = listOf(
+            createSample(1, pci = 101, earfcn = 1800, rsrp = -85, speedKmh = 30f),
+            createSample(2, pci = 102, earfcn = 2100, rsrp = -83, speedKmh = 30f)
+        )
+
+        val summary = HandoverAnalyzer.analyzeTransitions(1L, samples, 500.0)
+        assertEquals(1, summary.totalTransitions)
+        assertEquals(0, summary.confirmedHandovers)
+        assertEquals(1, summary.interFrequencyTransitions)
+        assertEquals("INTER_FREQ", summary.transitionEvents[0].eventType)
+    }
+
+    @Test
+    fun testTacChangeAloneDoesNotFabricateConfirmedHandover() {
+        // TAC change without handover trigger must remain INTRA_FREQ / INTER_FREQ, not CONFIRMED_HANDOVER
+        val samples = listOf(
+            createSample(1, pci = 101, tac = 100, earfcn = 1800, rsrp = -85, speedKmh = 30f),
+            createSample(2, pci = 102, tac = 200, earfcn = 1800, rsrp = -83, speedKmh = 30f)
+        )
+
+        val summary = HandoverAnalyzer.analyzeTransitions(1L, samples, 500.0)
+        assertEquals(1, summary.totalTransitions)
+        assertEquals(0, summary.confirmedHandovers)
+        assertEquals("INTRA_FREQ", summary.transitionEvents[0].eventType)
+    }
+
+    @Test
+    fun testInterRatTransitionClassification() {
+        val s1 = createSample(1, pci = 101, rsrp = -85).copy(servingRat = "4G")
+        val s2 = createSample(2, pci = 102, rsrp = -80).copy(servingRat = "2G")
+
+        val summary = HandoverAnalyzer.analyzeTransitions(1L, listOf(s1, s2), 500.0)
+        assertEquals(1, summary.totalTransitions)
+        assertEquals(0, summary.confirmedHandovers)
+        assertEquals("INTER_RAT", summary.transitionEvents[0].eventType)
     }
 }

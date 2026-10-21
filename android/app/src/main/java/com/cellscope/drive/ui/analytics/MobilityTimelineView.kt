@@ -206,11 +206,11 @@ class MobilityTimelineView @JvmOverloads constructor(
         val type = t.eventType.uppercase(Locale.US)
         val details = t.details.lowercase(Locale.US)
         return when {
-            details.contains("ping-pong") || type.contains("PING_PONG") -> TransitionLane.PING_PONG
-            type.contains("CONFIRMED") -> TransitionLane.CONFIRMED_HO
-            type.contains("DOWNGRADE") || type.contains("RAT") || details.contains("downgrade") -> TransitionLane.RAT_MOBILITY
-            details.contains("intra-freq") -> TransitionLane.INTRA_FREQ
-            details.contains("inter-freq") -> TransitionLane.INTER_FREQ
+            details.contains("ping-pong") || type.contains("PING_PONG") || type == "POSSIBLE_HANDOVER" -> TransitionLane.PING_PONG
+            type == "CONFIRMED_HANDOVER" || type == "HANDOVER_TRIGGER" -> TransitionLane.CONFIRMED_HO
+            type.contains("DOWNGRADE") || type.contains("UPGRADE") || type.contains("RAT") || details.contains("downgrade") || details.contains("inter-rat") -> TransitionLane.RAT_MOBILITY
+            type.contains("INTRA") || details.contains("intra-freq") || details.contains("intra") -> TransitionLane.INTRA_FREQ
+            type.contains("INTER_FREQ") || details.contains("inter-freq") -> TransitionLane.INTER_FREQ
             else -> TransitionLane.OBSERVED_OTHER
         }
     }

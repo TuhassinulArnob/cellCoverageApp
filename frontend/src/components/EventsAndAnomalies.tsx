@@ -57,7 +57,7 @@ export const EventsAndAnomalies: React.FC<EventsAndAnomaliesProps> = ({
             <span className="text-xs text-slate-500 dark:text-slate-400 block">Cell Transitions</span>
             <span className="text-2xl font-bold font-mono text-cyan-700 dark:text-cyan-400">{transitions.length}</span>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
-              {transitions.filter((t) => t.is_handover_trigger).length} active HO triggers
+              {transitions.filter((t) => (t.event_type || '').toUpperCase() === 'CONFIRMED_HANDOVER').length} Confirmed Handovers
             </span>
           </div>
           <Zap className="w-6 h-6 text-cyan-600 dark:text-cyan-400 opacity-60" />
@@ -216,16 +216,24 @@ export const EventsAndAnomalies: React.FC<EventsAndAnomaliesProps> = ({
                   <th className="pb-2">Row</th>
                   <th className="pb-2">Timestamp</th>
                   <th className="pb-2">Serving Transition</th>
-                  <th className="pb-2">Mobility Type</th>
-                  <th className="pb-2">Classification</th>
+                  <th className="pb-2">Carrier Channel</th>
+                  <th className="pb-2">Event Classification</th>
+                  <th className="pb-2">Signal Delta</th>
+                  <th className="pb-2">Evidence & Reason</th>
                   <th className="pb-2">GPS Location</th>
-                  <th className="pb-2">Details</th>
+                  <th className="pb-2">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-slate-800 dark:text-slate-300 font-mono">
                 {transitions.map((t) => {
-                  const isHandover = t.is_handover_trigger;
-                  const isIntraCell = t.from_pci === t.to_pci;
+                  const et = (t.event_type || '').toUpperCase();
+                  const isConfirmed = et === 'CONFIRMED_HANDOVER';
+                  const isIntra = et === 'INTRA_FREQ' || et === 'INTRA_FREQUENCY';
+                  const isInter = et === 'INTER_FREQ' || et === 'INTER_FREQUENCY';
+                  const isRat = et === 'INTER_RAT' || et === 'RAT_MOBILITY';
+                  const isReselection = et === 'CELL_RESELECTION';
+                  const isPingPong = et.includes('PING_PONG') || et.includes('PINGPONG');
+                  const isSignalLoss = et === 'SIGNAL_LOSS';
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -236,30 +244,75 @@ export const EventsAndAnomalies: React.FC<EventsAndAnomaliesProps> = ({
                         <span className="text-cyan-600 dark:text-cyan-400 mx-1.5">→</span>
                         <span className="text-cyan-700 dark:text-cyan-400 font-bold">PCI {t.to_pci ?? '?'}</span>
                       </td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400">
+                        {t.from_channel && t.to_channel
+                          ? `${t.from_channel} → ${t.to_channel}`
+                          : (t.to_channel ? `CH ${t.to_channel}` : 'Standard')}
+                      </td>
                       <td className="py-2.5">
-                        {isHandover ? (
+                        {isConfirmed ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800/60 font-semibold">
+                            ⚡ Confirmed Handover
+                          </span>
+                        ) : isIntra ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-cyan-800 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-300 dark:border-cyan-800/60 font-semibold">
+                            ↔ Intra-Frequency Transition
+                          </span>
+                        ) : isInter ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-950/80 px-2 py-0.5 rounded border border-blue-300 dark:border-blue-800/60 font-semibold">
+                            ⇄ Inter-Frequency Transition
+                          </span>
+                        ) : isRat ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-800/60 font-semibold">
+                            ⇅ Inter-RAT Transition
+                          </span>
+                        ) : isReselection ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-yellow-800 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-950/80 px-2 py-0.5 rounded border border-yellow-300 dark:border-yellow-800/60 font-semibold">
+                            ⇋ Cell Reselection
+                          </span>
+                        ) : isPingPong ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-800/60 font-semibold">
-                            ⚡ Handover Trigger
+                            ↺ Ping-Pong Candidate
+                          </span>
+                        ) : isSignalLoss ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-800/60 font-semibold">
+                            ⚠ Signal Loss
                           </span>
                         ) : (
-                          <span className="text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-transparent">
-                            Serving Transition
+                          <span className="inline-flex items-center gap-1 text-[10px] text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-2 py-0.5 rounded border border-purple-300 dark:border-purple-800/60 font-semibold">
+                            • Observed Cell Change
                           </span>
                         )}
                       </td>
-                      <td className="py-2.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                          isIntraCell
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            : 'bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-400 border border-sky-300 dark:border-sky-800/50'
-                        }`}>
-                          {isIntraCell ? 'Intra-PCI Event' : 'Inter-PCI Handover'}
+                      <td className="py-2.5 font-bold">
+                        {t.delta_signal_db !== undefined && t.delta_signal_db !== null ? (
+                          <span className={t.delta_signal_db >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>
+                            {t.delta_signal_db > 0 ? '+' : ''}{t.delta_signal_db} dB
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-slate-600 dark:text-slate-400 text-[11px] max-w-xs truncate" title={t.classification_reason || t.details}>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300 mr-1">
+                          [{t.confidence_label || 'EMPIRICAL'}]
                         </span>
+                        {t.classification_reason || t.details}
                       </td>
                       <td className="py-2.5 text-slate-500 dark:text-slate-400 text-[11px]">
                         {t.latitude ? `${t.latitude.toFixed(4)}, ${t.longitude?.toFixed(4)}` : 'N/A'}
                       </td>
-                      <td className="py-2.5 text-slate-600 dark:text-slate-400 text-[11px] truncate max-w-xs">{t.details}</td>
+                      <td className="py-2.5">
+                        {t.latitude && t.longitude && onNavigateToMap && (
+                          <button
+                            onClick={() => onNavigateToMap(t.latitude!, t.longitude!)}
+                            className="inline-flex items-center gap-1 text-[10px] text-cyan-600 dark:text-cyan-400 hover:underline"
+                            title="Center on map"
+                          >
+                            <MapPin className="w-3 h-3" /> Map
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

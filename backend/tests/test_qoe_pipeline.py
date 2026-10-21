@@ -140,3 +140,96 @@ test_id,session_id,timestamp_iso,timestamp_epoch_ms,test_trigger,test_status,ski
     assert t["upload_mbps"] is None    # MUST BE NONE, NOT 0.0!
     assert t["ping_latency_ms"] is None  # MUST BE NONE, NOT 0.0!
     assert t["packet_loss_pct"] == 100.0
+
+
+def test_load_fullroute_islampur_kushtia():
+    # Load the comprehensive 68.8 km drive test dataset
+    response = client.post("/api/datasets/load-preset/bd_fullroute_islampur_kushtia")
+    assert response.status_code == 200
+    data = response.json()
+
+    summary = data["summary"]
+    assert summary["total_records"] == 9315
+    assert summary["records_with_gps"] == 9269
+    assert summary["records_invalid_gps"] == 46
+    assert summary["has_gps"] is True
+    assert summary["unique_serving_cells"] > 20
+
+    # QoE metrics verification
+    qsum = summary["qoe_summary"]
+    assert qsum is not None
+    assert qsum["total_tests"] == 41
+    assert qsum["completed_tests"] == 41
+    assert qsum["has_speed_data"] is True
+    assert qsum["has_ping_data"] is True
+    assert qsum["median_download_mbps"] is not None
+    assert qsum["median_upload_mbps"] is not None
+    assert qsum["rtt_p90_ms"] is not None
+    assert qsum["rtt_p95_ms"] is not None
+    assert len(qsum["hourly_profiles"]) >= 1
+    assert len(qsum["summary_insights"]) >= 1
+
+    # Extended analysis with transitions
+    resp_ext = client.get("/api/datasets/current/extended-analysis")
+    assert resp_ext.status_code == 200
+    ext_data = resp_ext.json()
+    assert len(ext_data["transitions"]) == 246
+
+    # Check transition attributes
+    t0 = ext_data["transitions"][0]
+    assert "event_type" in t0
+    assert "confidence_label" in t0
+    assert "classification_reason" in t0
+    assert t0["to_pci"] is not None
+
+
+def test_handover_transition_synthesizer():
+    from backend.app.core.schema import DatasetSummary, MeasurementPoint
+    from backend.app.services.analytics import compute_extended_analysis
+
+    points = [
+        MeasurementPoint(id=1, timestamp_raw="2026-10-20 10:00:00", serving_cell_id=101, earfcn=1399, network_gen="4G LTE", rsrp_dbm=-85.0, tac=5001),
+        # Intra-frequency: same earfcn 1399
+        MeasurementPoint(id=2, timestamp_raw="2026-10-20 10:00:01", serving_cell_id=102, earfcn=1399, network_gen="4G LTE", rsrp_dbm=-88.0, tac=5001),
+        # Inter-frequency: earfcn 1399 -> 1650
+        MeasurementPoint(id=3, timestamp_raw="2026-10-20 10:00:02", serving_cell_id=205, earfcn=1650, network_gen="4G LTE", rsrp_dbm=-92.0, tac=5001),
+        # Inter-RAT: 4G LTE -> 5G NR
+        MeasurementPoint(id=4, timestamp_raw="2026-10-20 10:00:03", serving_cell_id=301, earfcn=630000, network_gen="5G NR", rsrp_dbm=-95.0, tac=5001),
+        # Missing channel: should be SERVING_CELL_CHANGE, NOT guessed as inter-frequency
+        MeasurementPoint(id=5, timestamp_raw="2026-10-20 10:00:04", serving_cell_id=401, earfcn=None, network_gen="5G NR", rsrp_dbm=-98.0, tac=5001),
+    ]
+
+    dummy_summary = DatasetSummary(
+        dataset_id="test",
+        filename="test.csv",
+        total_records=len(points),
+        records_with_gps=0,
+        records_invalid_gps=0,
+        has_gps=False,
+        unique_serving_cells=5,
+        unique_neighbor_cells=0,
+        handover_trigger_count=0,
+        handover_trigger_rate_pct=0.0
+    )
+
+    result = compute_extended_analysis(dummy_summary, points)
+    assert len(result.transitions) == 4
+
+    # 1: Intra-frequency
+    assert result.transitions[0].event_type == "INTRA_FREQ"
+    assert result.transitions[0].confidence_label == "HIGH"
+    assert "Intra-frequency" in result.transitions[0].classification_reason
+
+    # 2: Inter-frequency
+    assert result.transitions[1].event_type == "INTER_FREQ"
+    assert result.transitions[1].confidence_label == "MEDIUM"
+    assert "Inter-frequency" in result.transitions[1].classification_reason
+
+    # 3: Inter-RAT
+    assert result.transitions[2].event_type == "INTER_RAT"
+    assert result.transitions[2].confidence_label == "CONFIRMED_RAT"
+    assert "5G NR" in result.transitions[2].classification_reason
+
+    # 4: Missing earfcn -> SERVING_CELL_CHANGE (not guessed as inter-freq)
+    assert result.transitions[3].event_type == "SERVING_CELL_CHANGE"
+    assert result.transitions[3].confidence_label == "EMPIRICAL"

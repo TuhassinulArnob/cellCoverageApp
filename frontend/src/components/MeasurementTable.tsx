@@ -48,6 +48,8 @@ export const MeasurementTable: React.FC<MeasurementTableProps> = ({ measurements
       'rsrq_db',
       'rsrq_ie',
       'cinr_db',
+      'sinr_source',
+      'estimation_method',
       'handover_trigger',
       'rsrp_class',
     ];
@@ -64,6 +66,8 @@ export const MeasurementTable: React.FC<MeasurementTableProps> = ({ measurements
       m.rsrq_db ?? '',
       m.rsrq_ie ?? '',
       m.cinr_db ?? '',
+      m.sinr_source ?? '',
+      `"${m.estimation_method ?? ''}"`,
       m.handover_trigger,
       m.rsrp_class,
     ]);
@@ -201,9 +205,23 @@ export const MeasurementTable: React.FC<MeasurementTableProps> = ({ measurements
                   <span>{m.rsrq_db !== null ? `${m.rsrq_db}` : '—'}</span>
                 </td>
                 <td className="py-2 px-3 font-bold">
-                  <span className={m.cinr_db !== null && m.cinr_db < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}>
-                    {m.cinr_db !== null ? `${m.cinr_db}` : '—'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={m.cinr_db !== null && m.cinr_db < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}>
+                      {m.cinr_db !== null ? `${m.cinr_db}` : '—'}
+                    </span>
+                    {m.sinr_source && m.sinr_source !== 'UNAVAILABLE' && (
+                      <span
+                        className={`text-[9px] px-1 py-0.5 rounded border font-sans font-normal ${
+                          m.sinr_source === 'MEASURED'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800'
+                            : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800'
+                        }`}
+                        title={m.estimation_method || undefined}
+                      >
+                        {m.sinr_source === 'MEASURED' ? 'MEAS' : 'EST'}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2 px-3 text-slate-500 dark:text-slate-400">
                   {m.speed_kmh !== null ? `${m.speed_kmh} km/h` : '—'}

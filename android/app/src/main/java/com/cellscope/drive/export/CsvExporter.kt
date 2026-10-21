@@ -66,7 +66,9 @@ object CsvExporter {
         "Channel Type",
         "Primary Signal (dBm)",
         "Signal Metric Type",
-        "Secondary Signal (dB)"
+        "Secondary Signal (dB)",
+        "SINR Source",
+        "Estimation Method"
     ).joinToString(",")
 
     private val networkObservationsHeader = listOf(
@@ -288,7 +290,9 @@ object CsvExporter {
                     escapeCsv(m.channelType ?: ""),
                     m.primarySignalDbm?.toString() ?: "",
                     escapeCsv(m.signalMetricType ?: ""),
-                    m.secondarySignalDb?.let { String.format(Locale.US, "%.1f", it) } ?: ""
+                    m.secondarySignalDb?.let { String.format(Locale.US, "%.1f", it) } ?: "",
+                    escapeCsv(m.sinrSource),
+                    escapeCsv(m.estimationMethod ?: "")
                 ).joinToString(",")
                 writer.appendLine(row)
             }

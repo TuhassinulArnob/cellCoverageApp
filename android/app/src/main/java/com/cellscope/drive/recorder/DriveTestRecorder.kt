@@ -282,48 +282,65 @@ class DriveTestRecorder private constructor(private val context: Context) {
                     var confidence = 0.80f
 
                     val currentRat = metrics.servingRat ?: metrics.networkGen.code
-                    val currentChannel = metrics.channelNumber ?: metrics.earfcn
-                    val currentCellId = metrics.eci
+                    val currentChannel = metrics.channelNumber ?: metrics.earfcn ?: lastRecordedChannel
+                    val currentCellId = metrics.eci ?: lastRecordedCellId
                     val currentPci = metrics.servingPci
                     val currentRsrp = metrics.rsrpDbm ?: metrics.primarySignalDbm
-                    val currentTac = metrics.tac
+                    val currentTac = metrics.tac ?: lastRecordedTac
 
                     val hasPrevious = (lastRecordedRat != null || lastRecordedPci != null || lastRecordedCellId != null)
 
                     if (hasPrevious) {
-                        // A. Inter-RAT Handover / Transition (e.g. 4G -> 2G, 2G -> 4G, 4G -> 3G, 3G -> 2G, 5G -> 4G)
+                        val isStationary = gps.isStationary || (gps.speedKmh ?: 0f) < 2.5f
+                        val isSignalDrop = (lastRecordedRsrp ?: -90) < -115
+                        val isTacChanged = lastRecordedTac != null && currentTac != null && lastRecordedTac != currentTac
+                        val isIntraFreq = lastRecordedChannel != null && currentChannel != null && lastRecordedChannel == currentChannel
+                        val isInterFreq = lastRecordedChannel != null && currentChannel != null && lastRecordedChannel != currentChannel
+                        val isMoving = (gps.speedKmh ?: 0f) >= 2.5f && !gps.isStationary
+                        // A. Inter-RAT Transition (e.g. 4G -> 2G, 2G -> 4G, 4G -> 3G, 5G -> 4G)
                         if (lastRecordedRat != null && currentRat != null && lastRecordedRat != currentRat) {
-                            hoTrigger = 1
+                            hoTrigger = 0
                             transType = "INTER_RAT"
-                            confidence = 0.90f
+                            confidence = 0.95f
                             transDetails = "Inter-RAT transition: $lastRecordedRat -> $currentRat (Ch: $lastRecordedChannel -> $currentChannel)"
                         }
-                        // B. Inter-Frequency Handover (Same RAT, carrier frequency changed)
-                        else if (lastRecordedChannel != null && currentChannel != null && lastRecordedChannel != currentChannel) {
-                            hoTrigger = 1
-                            transType = "INTER_FREQ"
-                            confidence = 0.85f
-                            transDetails = "Inter-frequency transition on $currentRat: Ch $lastRecordedChannel -> $currentChannel (PCI: $lastRecordedPci -> $currentPci)"
-                        }
-                        // C. Intra-Frequency Cell Transition (PCI/PSC changed in LTE/5G/3G)
+                        // B. Physical Serving Cell Change (PCI changed)
                         else if (lastRecordedPci != null && currentPci != null && lastRecordedPci != currentPci) {
-                            hoTrigger = 1
-                            val isStationary = gps.isStationary || (gps.speedKmh ?: 0f) < 2.5f
-                            val isSignalDrop = (lastRecordedRsrp ?: -90) < -115
-
-                            transType = when {
-                                isSignalDrop -> "SIGNAL_LOSS"
-                                isStationary -> "CELL_RESELECTION"
-                                lastRecordedTac != null && currentTac != null && lastRecordedTac != currentTac -> "CONFIRMED_HANDOVER"
-                                else -> "INTRA_LTE"
+                            hoTrigger = 0
+                            val tacNote = if (isTacChanged) " (TAC $lastRecordedTac -> $currentTac)" else ""
+                            if (isSignalDrop) {
+                                transType = "SIGNAL_LOSS"
+                                confidence = 0.85f
+                                transDetails = "Signal collapse (${lastRecordedRsrp ?: -120} dBm) before transition to PCI $currentPci$tacNote"
+                            } else if (isStationary) {
+                                transType = "CELL_RESELECTION"
+                                confidence = 0.85f
+                                transDetails = "Stationary cell reselection on $currentRat: PCI $lastRecordedPci -> $currentPci$tacNote"
+                            } else if (isInterFreq) {
+                                transType = "INTER_FREQ"
+                                confidence = 0.60f
+                                transDetails = "Inter-frequency transition on $currentRat: Ch $lastRecordedChannel -> $currentChannel (PCI: $lastRecordedPci -> $currentPci)$tacNote"
+                            } else if (isIntraFreq) {
+                                transType = "INTRA_FREQ"
+                                confidence = 0.60f
+                                val chStr = currentChannel?.let { "Ch $it" } ?: "Carrier"
+                                transDetails = "Intra-frequency transition on $currentRat: $chStr (PCI: $lastRecordedPci -> $currentPci)$tacNote"
+                            } else {
+                                transType = "OBSERVED_TRANSITION"
+                                confidence = 0.50f
+                                transDetails = "Observed cell change on $currentRat: PCI $lastRecordedPci -> $currentPci$tacNote"
                             }
-                            confidence = if (transType == "CONFIRMED_HANDOVER") 0.95f else 0.80f
-                            transDetails = "Transition from PCI $lastRecordedPci to PCI $currentPci"
+                        }
+                        // C. Inter-Frequency Transition (Channel changed on same RAT without PCI change or when PCI null)
+                        else if (lastRecordedChannel != null && currentChannel != null && lastRecordedChannel != currentChannel) {
+                            hoTrigger = 0
+                            transType = "INTER_FREQ"
+                            confidence = 0.60f
+                            transDetails = "Inter-frequency transition on $currentRat: Ch $lastRecordedChannel -> $currentChannel (PCI: ${lastRecordedPci ?: currentPci ?: "?"})"
                         }
                         // D. 2G Cell Reselection / Handover (where PCI is null, but Cell ID changed)
                         else if (currentRat == "2G" && lastRecordedCellId != null && currentCellId != null && lastRecordedCellId != currentCellId) {
                             hoTrigger = 1
-                            val isStationary = gps.isStationary || (gps.speedKmh ?: 0f) < 2.5f
                             transType = if (isStationary) "CELL_RESELECTION" else "INTRA_RAT"
                             confidence = 0.85f
                             transDetails = "2G Cell reselection: Cell ID $lastRecordedCellId -> $currentCellId"
@@ -360,12 +377,12 @@ class DriveTestRecorder private constructor(private val context: Context) {
 
                     // Always update last recorded metrics (never conditional on servingPci != null)
                     if (currentRat != null || currentPci != null || currentCellId != null) {
-                        lastRecordedPci = currentPci
-                        lastRecordedRsrp = currentRsrp
-                        lastRecordedTac = currentTac
-                        lastRecordedRat = currentRat
-                        lastRecordedChannel = currentChannel
-                        lastRecordedCellId = currentCellId
+                        lastRecordedPci = currentPci ?: lastRecordedPci
+                        lastRecordedRsrp = currentRsrp ?: lastRecordedRsrp
+                        lastRecordedTac = currentTac ?: lastRecordedTac
+                        lastRecordedRat = currentRat ?: lastRecordedRat
+                        lastRecordedChannel = currentChannel ?: lastRecordedChannel
+                        lastRecordedCellId = currentCellId ?: lastRecordedCellId
                     }
 
                     // 2. Detect Generation continuity transition (e.g. 5G -> 4G -> 3G -> 2G or Out of Service)
@@ -464,7 +481,13 @@ class DriveTestRecorder private constructor(private val context: Context) {
                         channelType = metrics.channelType,
                         primarySignalDbm = metrics.primarySignalDbm,
                         signalMetricType = metrics.signalMetricType,
-                        secondarySignalDb = metrics.secondarySignalDb
+                        secondarySignalDb = metrics.secondarySignalDb,
+                        sinrSource = metrics.sinrSource,
+                        estimationMethod = metrics.estimationMethod,
+                        estimationAssumptions = metrics.estimationAssumptions,
+                        sinrConfidence = metrics.sinrConfidence,
+                        qualitativeDiagnostic = metrics.qualitativeDiagnostic,
+                        impliedRssiDbm = metrics.impliedRssiDbm
                     )
 
                     // 4. Detect Call State transition

@@ -113,7 +113,7 @@ object HandoverAnalyzer {
 
                 // Detect transition between physical cells
                 if (lastPci != null && lastPci != currentPci) {
-                    val isStationary = (m.speedKmh ?: 0f) < 4.0f
+                    val isStationary = (m.speedKmh ?: 0f) < 2.5f
                     val isSignalDrop = (lastRsrp ?: -90) < -115
                     val deltaRsrp = if (lastRsrp != null && m.rsrpDbm != null) {
                         (m.rsrpDbm - lastRsrp).toDouble().also { deltaRsrpList.add(it) }
@@ -121,9 +121,10 @@ object HandoverAnalyzer {
 
                     // Intra vs Inter frequency classification
                     val isIntraFreq = (lastEarfcn != null && m.earfcn != null && lastEarfcn == m.earfcn)
+                    val isInterFreq = (lastEarfcn != null && m.earfcn != null && lastEarfcn != m.earfcn)
                     if (isIntraFreq) {
                         intraFreqCount++
-                    } else if (lastEarfcn != null && m.earfcn != null) {
+                    } else if (isInterFreq) {
                         interFreqCount++
                     }
 
@@ -140,36 +141,76 @@ object HandoverAnalyzer {
                     val detail: String
                     val deltaStr = deltaRsrp?.let { " (ΔRSRP: ${if (it >= 0) "+$it" else "$it"} dB)" } ?: ""
 
+                    // Grounded handover evidence check
+                    val isExplicitTrigger = m.handoverTrigger == 1 || m.transitionType == "CONFIRMED_HANDOVER"
+                    val isMoving = (m.speedKmh ?: 0f) >= 2.5f
+                    val isDataActivityConfirmed = (m.dataActivityState == "DATAINOUT" || m.dataActivityState == "DATAIN" || m.dataActivityState == "DATAOUT") && (m.speedKmh ?: 0f) >= 5.0f && !isSignalDrop
+                    val isConfirmedHandover = isExplicitTrigger || isDataActivityConfirmed
+                    val currentRat = m.servingRat ?: m.networkType
+
                     when {
+                        lastRat != null && currentRat != null && lastRat != currentRat -> {
+                            eventType = "INTER_RAT"
+                            confidence = 0.95f
+                            detail = "Inter-RAT transition: $lastRat -> $currentRat (PCI $lastPci -> $currentPci)$deltaStr"
+                            observedCount++
+                        }
+                        isConfirmedHandover -> {
+                            eventType = "CONFIRMED_HANDOVER"
+                            confidence = if (isExplicitTrigger) 0.95f else 0.90f
+                            val freqQualifier = when {
+                                isIntraFreq -> "intra-frequency "
+                                isInterFreq -> "inter-frequency "
+                                else -> ""
+                            }
+                            val chStr = when {
+                                isIntraFreq -> "on Ch ${m.earfcn ?: lastEarfcn}"
+                                isInterFreq -> "from Ch $lastEarfcn to Ch ${m.earfcn}"
+                                else -> ""
+                            }
+                            val reason = when {
+                                isExplicitTrigger -> "Modem/Platform handover trigger asserted"
+                                else -> "Active connected data transmission continuity under motion"
+                            }
+                            detail = "Confirmed ${freqQualifier}handover ${chStr.trim()} (PCI $lastPci -> $currentPci)$deltaStr - $reason".replace("  ", " ")
+                            confirmedCount++
+                        }
                         isSignalDrop -> {
                             eventType = "SIGNAL_LOSS"
                             confidence = 0.85f
-                            detail = "Signal collapsed to ${lastRsrp ?: -120} dBm before transition to PCI $currentPci$deltaStr"
+                            detail = "Radio link signal drop: Signal collapsed to ${lastRsrp ?: -120} dBm before transition to PCI $currentPci$deltaStr"
                             signalLossCount++
                         }
                         isStationary -> {
                             eventType = "CELL_RESELECTION"
-                            confidence = 0.80f
-                            detail = "Stationary cell reselection while speed was ${String.format(Locale.US, "%.1f", m.speedKmh ?: 0f)} km/h$deltaStr"
+                            confidence = 0.85f
+                            detail = "Stationary cell reselection while speed was ${String.format(Locale.US, "%.1f", m.speedKmh ?: 0f)} km/h from PCI $lastPci to PCI $currentPci$deltaStr"
                             reselectionCount++
                         }
                         isPingPong -> {
                             eventType = "POSSIBLE_HANDOVER"
-                            confidence = 0.65f
+                            confidence = 0.70f
                             val returnSeconds = (m.timestampMs - recentDeparture!!.second) / 1000L
                             detail = "Rapid ping-pong transition back to PCI $currentPci within ${returnSeconds}s$deltaStr"
                         }
-                        lastTac != null && m.tac != null && lastTac != m.tac -> {
-                            eventType = "CONFIRMED_HANDOVER"
-                            confidence = 0.95f
-                            detail = "Inter-TAC handover from TAC $lastTac to TAC ${m.tac} with PCI $lastPci -> $currentPci$deltaStr"
-                            confirmedCount++
+                        isIntraFreq -> {
+                            eventType = "INTRA_FREQ"
+                            confidence = 0.60f
+                            val chStr = if (m.earfcn != null) "on Ch ${m.earfcn}" else ""
+                            detail = "Intra-frequency transition $chStr (PCI $lastPci -> $currentPci)$deltaStr".trim()
+                            observedCount++
+                        }
+                        isInterFreq -> {
+                            eventType = "INTER_FREQ"
+                            confidence = 0.60f
+                            val chStr = "from Ch $lastEarfcn to Ch ${m.earfcn}"
+                            detail = "Inter-frequency transition $chStr (PCI $lastPci -> $currentPci)$deltaStr".trim()
+                            observedCount++
                         }
                         else -> {
                             eventType = "OBSERVED_TRANSITION"
-                            confidence = 0.75f
-                            val freqType = if (isIntraFreq) "Intra-Freq" else "Inter-Freq"
-                            detail = "$freqType switch from PCI $lastPci to PCI $currentPci$deltaStr"
+                            confidence = 0.60f
+                            detail = "Observed transition from PCI $lastPci to PCI $currentPci$deltaStr"
                             observedCount++
                         }
                     }
@@ -206,11 +247,11 @@ object HandoverAnalyzer {
                 }
 
                 lastPci = currentPci
-                lastEarfcn = m.channelNumber ?: m.earfcn
+                lastEarfcn = (m.channelNumber ?: m.earfcn) ?: lastEarfcn
                 lastRsrp = m.rsrpDbm
-                lastTac = m.tac
-                lastRat = m.servingRat ?: m.networkType
-                lastCellId = m.eci
+                lastTac = m.tac ?: lastTac
+                lastRat = (m.servingRat ?: m.networkType) ?: lastRat
+                lastCellId = m.eci ?: lastCellId
                 lastTimestampMs = m.timestampMs
             }
         }

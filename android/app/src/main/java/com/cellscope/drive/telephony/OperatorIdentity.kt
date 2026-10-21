@@ -48,9 +48,9 @@ data class OperatorIdentity(
             "OUT_OF_SERVICE", "POWER_OFF" -> "No Service"
             "EMERGENCY_ONLY" -> "Emergency Calls Only"
             else -> {
-                val base = if (servingResolvedName.isNotBlank() && servingResolvedName != "Unknown Operator") {
+                val base = if (servingResolvedName.isNotBlank() && !servingResolvedName.startsWith("Unknown")) {
                     servingResolvedName
-                } else if (networkResolvedName.isNotBlank() && networkResolvedName != "Unknown Operator") {
+                } else if (networkResolvedName.isNotBlank() && !networkResolvedName.startsWith("Unknown")) {
                     networkResolvedName
                 } else {
                     "Updating..."
@@ -121,13 +121,24 @@ object BangladeshMccMnc {
 
     fun resolveOperatorName(mccMnc: String?, fallbackAlpha: String?): String {
         if (mccMnc.isNullOrBlank()) {
-            return fallbackAlpha?.takeIf { it.isNotBlank() } ?: "Unknown Operator (Unbroadcast PLMN)"
+            return fallbackAlpha?.takeIf { it.isNotBlank() } ?: "Unknown / Unverified (Unbroadcast PLMN)"
         }
         val clean = mccMnc.trim().replace("-", "")
         val mapped = OPERATOR_MAP[clean]
         if (mapped != null) {
-            return if (!fallbackAlpha.isNullOrBlank() && !mapped.contains(fallbackAlpha, ignoreCase = true)) {
-                "$mapped ($fallbackAlpha)"
+            val cleanAlpha = fallbackAlpha?.trim()
+            // Treat RYZE, MyBL, and similar digital packages/sub-brands as commercial packages rather than mutating operator identity
+            val isCommercialBrandLabel = cleanAlpha != null && (
+                cleanAlpha.equals("RYZE", ignoreCase = true) ||
+                cleanAlpha.equals("MyBL", ignoreCase = true) ||
+                cleanAlpha.equals("BL", ignoreCase = true) ||
+                cleanAlpha.equals("Banglalink", ignoreCase = true) ||
+                cleanAlpha.equals("Robi", ignoreCase = true) ||
+                cleanAlpha.equals("GP", ignoreCase = true) ||
+                cleanAlpha.equals("Grameenphone", ignoreCase = true)
+            )
+            return if (!cleanAlpha.isNullOrBlank() && !mapped.contains(cleanAlpha, ignoreCase = true) && !isCommercialBrandLabel) {
+                "$mapped ($cleanAlpha)"
             } else {
                 mapped
             }
@@ -138,7 +149,7 @@ object BangladeshMccMnc {
             val name = fallbackAlpha?.takeIf { it.isNotBlank() } ?: "PLMN 470-$mnc"
             return "$name (BD 470-$mnc)"
         }
-        return fallbackAlpha?.takeIf { it.isNotBlank() } ?: "PLMN $clean"
+        return fallbackAlpha?.takeIf { it.isNotBlank() } ?: "Unknown / Unverified ($clean)"
     }
 
     fun isBangladeshMcc(mccMnc: String?): Boolean {

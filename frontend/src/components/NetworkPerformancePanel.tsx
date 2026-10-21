@@ -321,7 +321,7 @@ export const NetworkPerformancePanel: React.FC<NetworkPerformancePanelProps> = (
                 Mean: <strong className="text-slate-800 dark:text-slate-200">{summary?.avg_ping_ms?.toFixed(1) ?? '—'}</strong> ms
               </span>
               <span>
-                Min: <strong className="text-slate-800 dark:text-slate-200">{summary?.min_ping_ms?.toFixed(0) ?? '—'}</strong> ms
+                p95: <strong className="text-amber-600 dark:text-amber-400">{summary?.rtt_p95_ms?.toFixed(0) ?? '—'}</strong> ms
               </span>
             </div>
           </div>
@@ -582,6 +582,120 @@ export const NetworkPerformancePanel: React.FC<NetworkPerformancePanelProps> = (
         </div>
       </div>
 
+      {/* Summary Insight Panel & Engineering Diagnostics */}
+      {summary?.summary_insights && summary.summary_insights.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm dark:shadow-none transition-colors">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+            <Radio className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Engineering QoE Findings & Insight Panel</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Data-driven findings based on physical probe throughput, round-trip latency, and radio link state
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {summary.summary_insights.map((ins, i) => {
+              const borderCol =
+                ins.severity === 'good'
+                  ? 'border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20'
+                  : ins.severity === 'warning'
+                  ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/50 dark:bg-amber-950/20'
+                  : ins.severity === 'critical'
+                  ? 'border-rose-300 dark:border-rose-800/80 bg-rose-50/50 dark:bg-rose-950/20'
+                  : 'border-cyan-300 dark:border-cyan-800/80 bg-cyan-50/50 dark:bg-cyan-950/20';
+
+              const badgeCol =
+                ins.severity === 'good'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300'
+                  : ins.severity === 'warning'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300'
+                  : ins.severity === 'critical'
+                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300'
+                  : 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300';
+
+              return (
+                <div key={i} className={`p-3.5 rounded-lg border ${borderCol} space-y-1.5`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 font-bold">
+                      {ins.category}
+                    </span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${badgeCol}`}>
+                      {ins.confidence}
+                    </span>
+                  </div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">{ins.title}</h4>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{ins.description}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Hourly Traffic-Performance Profile */}
+      {summary?.hourly_profiles && summary.hourly_profiles.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm dark:shadow-none transition-colors">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Hourly Traffic-Performance Profile</h3>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Time-of-day download, upload, and RTT performance metrics aggregated across hourly windows
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+              {summary.hourly_profiles.length} Active {summary.hourly_profiles.length === 1 ? 'Hour' : 'Hours'}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono">
+              <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-3">Hour Window</th>
+                  <th className="py-2.5 px-3">Tests</th>
+                  <th className="py-2.5 px-3">Avg Download</th>
+                  <th className="py-2.5 px-3">Download Range</th>
+                  <th className="py-2.5 px-3">Avg Upload</th>
+                  <th className="py-2.5 px-3">Upload Range</th>
+                  <th className="py-2.5 px-3">Avg Ping RTT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                {summary.hourly_profiles.map((hp) => (
+                  <tr key={hp.hour} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{hp.hour_label}</td>
+                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{hp.test_count} tests</td>
+                    <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400">
+                      {hp.avg_download_mbps !== null ? `${hp.avg_download_mbps.toFixed(2)} Mbps` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500">
+                      {hp.min_download_mbps !== null && hp.max_download_mbps !== null
+                        ? `${hp.min_download_mbps.toFixed(2)} – ${hp.max_download_mbps.toFixed(2)} Mbps`
+                        : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-cyan-600 dark:text-cyan-400">
+                      {hp.avg_upload_mbps !== null ? `${hp.avg_upload_mbps.toFixed(2)} Mbps` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500">
+                      {hp.min_upload_mbps !== null && hp.max_upload_mbps !== null
+                        ? `${hp.min_upload_mbps.toFixed(2)} – ${hp.max_upload_mbps.toFixed(2)} Mbps`
+                        : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-amber-600 dark:text-amber-400">
+                      {hp.avg_ping_ms !== null ? `${hp.avg_ping_ms.toFixed(0)} ms` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Individual Test Results Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm dark:shadow-none transition-colors">
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 flex items-center justify-between">
@@ -664,7 +778,7 @@ export const NetworkPerformancePanel: React.FC<NetworkPerformancePanelProps> = (
                     )}
                   </td>
                   <td className="py-2.5 px-3">
-                    {t.packet_loss_pct !== null ? (
+                    {t.packet_loss_pct !== null && t.packet_loss_pct !== undefined ? (
                       <span
                         className={
                           t.packet_loss_pct > 0
@@ -672,10 +786,10 @@ export const NetworkPerformancePanel: React.FC<NetworkPerformancePanelProps> = (
                             : 'text-emerald-600 dark:text-emerald-400'
                         }
                       >
-                        {t.packet_loss_pct.toFixed(0)}%
+                        {t.packet_loss_pct.toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-slate-400">0%</span>
+                      <span className="text-slate-400 font-normal">—</span>
                     )}
                   </td>
                   <td className="py-2.5 px-3">

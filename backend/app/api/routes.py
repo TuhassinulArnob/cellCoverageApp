@@ -36,13 +36,22 @@ def resolve_preset_path(rel_path: str) -> Optional[Path]:
 
 PRESET_CATALOG = [
     {
+        "id": "bd_fullroute_islampur_kushtia",
+        "title": "Full Highway Drive Test: Islampur to Kushtia (Robi 4G LTE)",
+        "category": "Field Dataset",
+        "rel_path": "docs/fullroute_islampurtokushtia.csv",
+        "rows": 9315,
+        "has_gps": True,
+        "description": "Complete 68.8 km inter-district highway drive test from Islampur to Kushtia with 9,315 telemetry points, 41 active QoE speed/latency tests, and 246 mobile cell transitions on Robi Axiata."
+    },
+    {
         "id": "bd_survey_qoe_latest",
-        "title": "Live Field Survey with Active Network QoE & Speed Tests (20261020)",
+        "title": "Stationary Field Survey with Active QoE Tests (Islampur)",
         "category": "Field Dataset",
         "rel_path": "docs/cellscope_extended_Survey_20261020_081637_20261020_081637.csv",
         "rows": 98,
         "has_gps": True,
-        "description": "Genuine multi-section drive test on Robi Axiata featuring bounded active download & upload throughput, RTT latency, RFC 3550 jitter, and probe loss tests."
+        "description": "Stationary field survey snippet on Robi Axiata at Islampur with bounded active download & upload throughput, RTT latency, RFC 3550 jitter, and probe loss tests."
     },
     {
         "id": "bd_ds3_v1",
@@ -146,7 +155,8 @@ def load_preset_dataset(preset_id: str):
             "summary": summary,
             "points": points,
             "qoe_tests": qoe_tests,
-            "raw_filename": preset["title"]
+            "raw_filename": preset["title"],
+            "raw_text": raw_text,
         }
         global _CURRENT_DATASET_ID
         _CURRENT_DATASET_ID = preset_id
@@ -183,7 +193,8 @@ async def upload_csv_file(file: UploadFile = File(...)):
             "summary": summary,
             "points": points,
             "qoe_tests": qoe_tests,
-            "raw_filename": file.filename
+            "raw_filename": file.filename,
+            "raw_text": raw_text,
         }
         global _CURRENT_DATASET_ID
         _CURRENT_DATASET_ID = dataset_id
@@ -203,7 +214,7 @@ def get_current_summary():
     """Gets the active dataset summary."""
     if not _CURRENT_DATASET_ID or _CURRENT_DATASET_ID not in _DATASET_STORE:
         # If none loaded, automatically load default benchmark
-        default_id = "bd_ds3_v1"
+        default_id = "bd_fullroute_islampur_kushtia"
         load_preset_dataset(default_id)
 
     return _DATASET_STORE[_CURRENT_DATASET_ID]["summary"]
@@ -218,7 +229,7 @@ def get_current_measurements(
 ):
     """Gets measurement points for the active dataset with optional filters."""
     if not _CURRENT_DATASET_ID or _CURRENT_DATASET_ID not in _DATASET_STORE:
-        load_preset_dataset("bd_ds3_v1")
+        load_preset_dataset("bd_fullroute_islampur_kushtia")
 
     all_points: List[MeasurementPoint] = _DATASET_STORE[_CURRENT_DATASET_ID]["points"]
 
@@ -241,15 +252,16 @@ def get_current_measurements(
 def get_extended_analysis():
     """Gets comprehensive telecom analysis including transitions, anomalies, service holes, and data quality."""
     if not _CURRENT_DATASET_ID or _CURRENT_DATASET_ID not in _DATASET_STORE:
-        load_preset_dataset("bd_ds3_v1")
+        load_preset_dataset("bd_fullroute_islampur_kushtia")
 
     dataset_entry = _DATASET_STORE[_CURRENT_DATASET_ID]
     summary = dataset_entry["summary"]
     points = dataset_entry["points"]
     qoe_tests = dataset_entry.get("qoe_tests", [])
+    raw_text = dataset_entry.get("raw_text")
 
     from backend.app.services.analytics import compute_extended_analysis
-    return compute_extended_analysis(summary=summary, points=points, qoe_tests=qoe_tests)
+    return compute_extended_analysis(summary=summary, points=points, qoe_tests=qoe_tests, raw_text=raw_text)
 
 
 @router.get("/datasets/current/qoe-tests", response_model=List[QoeTestRecord])
@@ -328,12 +340,12 @@ def export_current_dataset_csv(extended: bool = Query(False, description="Export
                 p.operator or ""
             ])
     else:
-        # Extended 18-column CSV with accuracy, heading, and quality classes
+        # Extended 20-column CSV with accuracy, heading, quality classes, and SINR provenance
         headers = [
             "Timestamp", "Latitude", "Longitude", "Accuracy (m)", "Heading (deg)",
             "Speed (km/h)", "Serving Cell ID", "Neighbor Cell ID",
             "Serving Cell RSRP", "RSRP Class", "Serving Cell RSRQ", "RSRQ Class",
-            "Serving Cell CINR", "CINR Class", "Handover Trigger",
+            "Serving Cell CINR", "SINR Source", "Estimation Method", "CINR Class", "Handover Trigger",
             "TAC", "EARFCN", "Network Gen"
         ]
         writer.writerow(headers)
@@ -352,6 +364,8 @@ def export_current_dataset_csv(extended: bool = Query(False, description="Export
                 p.rsrq_db if p.rsrq_db is not None else "",
                 p.rsrq_class,
                 p.cinr_db if p.cinr_db is not None else "",
+                p.sinr_source,
+                p.estimation_method or "",
                 p.cinr_class,
                 p.handover_trigger,
                 p.tac if p.tac is not None else "",

@@ -33,7 +33,7 @@ import com.cellscope.drive.data.entity.ServiceHoleEntity
         CallReliabilityEventEntity::class,
         DirectionalSurveyEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class CellScopeDatabase : RoomDatabase() {
@@ -305,6 +305,17 @@ abstract class CellScopeDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN sinrSource TEXT NOT NULL DEFAULT 'UNAVAILABLE'")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN estimationMethod TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN estimationAssumptions TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN sinrConfidence TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN qualitativeDiagnostic TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE lte_measurements ADD COLUMN impliedRssiDbm REAL DEFAULT NULL")
+            }
+        }
+
         fun getDatabase(context: Context): CellScopeDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -312,7 +323,7 @@ abstract class CellScopeDatabase : RoomDatabase() {
                     CellScopeDatabase::class.java,
                     "cellscope_drive.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

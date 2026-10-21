@@ -31,7 +31,13 @@ data class RawCellCandidate(
     val channelType: String? = null,
     val primarySignalDbm: Int? = null,
     val signalMetricType: String? = null,
-    val secondarySignalDb: Double? = null
+    val secondarySignalDb: Double? = null,
+    val sinrSource: String = "UNAVAILABLE",
+    val estimationMethod: String? = null,
+    val estimationAssumptions: String? = null,
+    val sinrConfidence: String? = null,
+    val qualitativeDiagnostic: String? = null,
+    val impliedRssiDbm: Double? = null
 ) {
     companion object {
         const val CONNECTION_NONE = 0
@@ -45,14 +51,21 @@ object ServingCellClassifier {
 
     /**
      * Authoritatively resolves serving status for a set of simultaneously scanned cells.
+     *
+     * In Dual-SIM environments where Android modem reports multiple registered cells (one per SIM),
+     * [preferredPlmn] (the active data subscription's registered PLMN) is authoritatively prioritized
+     * to prevent an idle or standby SIM with a stronger signal from overriding the active data SIM's PCell.
+     *
      * Enforces:
      * 1. At most one Primary Serving Cell (PCell).
      * 2. Secondary Serving Cells (SCells) identified via Carrier Aggregation.
      * 3. Ambiguous registered cells demoted to SERVING_UNCONFIRMED, never duplicate PCells.
      * 4. Zero registered cells never promotes a neighbor.
      */
-    fun classify(candidates: List<RawCellCandidate>): List<ObservedCell> {
+    fun classify(candidates: List<RawCellCandidate>, preferredPlmn: String? = null): List<ObservedCell> {
         if (candidates.isEmpty()) return emptyList()
+
+        val cleanPreferredPlmn = preferredPlmn?.trim()?.replace("-", "")
 
         // Pass 1: Check for explicit Android API 28+ CellConnectionStatus
         val explicitPrimaries = candidates.filter { it.connectionStatus == RawCellCandidate.CONNECTION_PRIMARY_SERVING }
@@ -60,7 +73,8 @@ object ServingCellClassifier {
         // If Android API 28+ provided unambiguous PRIMARY_SERVING
         if (explicitPrimaries.isNotEmpty()) {
             val primaryCandidate = explicitPrimaries.maxWithOrNull(
-                compareBy<RawCellCandidate> { hasFullIdentity(it) }
+                compareBy<RawCellCandidate> { cleanPreferredPlmn != null && it.operatorNumeric?.replace("-", "") == cleanPreferredPlmn }
+                    .thenBy { hasFullIdentity(it) }
                     .thenBy { it.rsrpDbm ?: -999 }
             ) ?: explicitPrimaries.first()
 
@@ -80,7 +94,7 @@ object ServingCellClassifier {
                     )
                     c.isRegistered -> c.toObservedCell(
                         ServingStatus.SERVING_UNCONFIRMED,
-                        "Observed cell — serving status unconfirmed (Registered without Primary Connection status)"
+                        "Observed cell — serving status unconfirmed (Registered on alternate SIM/bearer)"
                     )
                     else -> c.toObservedCell(
                         ServingStatus.NEIGHBOR,
@@ -131,19 +145,30 @@ object ServingCellClassifier {
             }
         }
 
-        // Multiple registered cells reported by RIL: Disambiguate!
-        // Select exactly one PCell based on complete identity (TAC/ECI) and superior RSRP
-        val primaryCandidate = registeredCandidates.maxWithOrNull(
+        // Multiple registered cells reported by RIL (e.g. Dual-SIM device): Disambiguate!
+        // First prioritize candidates that match the active data subscription's registered PLMN
+        val matchingPlmnCandidates = if (!cleanPreferredPlmn.isNullOrBlank()) {
+            registeredCandidates.filter { it.operatorNumeric?.replace("-", "") == cleanPreferredPlmn }
+        } else emptyList()
+
+        val candidatePool = if (matchingPlmnCandidates.isNotEmpty()) matchingPlmnCandidates else registeredCandidates
+
+        // Select exactly one PCell from eligible pool based on complete identity (TAC/ECI) and superior RSRP
+        val primaryCandidate = candidatePool.maxWithOrNull(
             compareBy<RawCellCandidate> { hasFullIdentity(it) }
                 .thenBy { it.rsrpDbm ?: -999 }
                 .thenBy { (it.earfcn ?: it.nrArfcn) != null }
-        ) ?: registeredCandidates.first()
+        ) ?: candidatePool.first()
 
         return candidates.map { c ->
             when {
                 c === primaryCandidate -> c.toObservedCell(
                     ServingStatus.PRIMARY_SERVING,
-                    "Primary serving cell resolved from multiple registered cells (complete identity and superior signal)"
+                    if (matchingPlmnCandidates.isNotEmpty()) {
+                        "Primary serving cell verified for active data SIM (${c.operatorAlpha ?: cleanPreferredPlmn})"
+                    } else {
+                        "Primary serving cell resolved from multiple registered cells (complete identity and superior signal)"
+                    }
                 )
                 c.connectionStatus == RawCellCandidate.CONNECTION_SECONDARY_SERVING -> c.toObservedCell(
                     ServingStatus.SECONDARY_SERVING,
@@ -151,7 +176,11 @@ object ServingCellClassifier {
                 )
                 c.isRegistered -> c.toObservedCell(
                     ServingStatus.SERVING_UNCONFIRMED,
-                    "Observed cell — serving status unconfirmed (RIL reported multiple registered cells)"
+                    if (cleanPreferredPlmn != null && c.operatorNumeric?.replace("-", "") != cleanPreferredPlmn) {
+                        "Observed registered cell on alternate SIM subscription (${c.operatorAlpha ?: c.operatorNumeric ?: "Secondary SIM"})"
+                    } else {
+                        "Observed cell — serving status unconfirmed (RIL reported multiple registered cells)"
+                    }
                 )
                 else -> c.toObservedCell(
                     ServingStatus.NEIGHBOR,
@@ -197,7 +226,13 @@ object ServingCellClassifier {
             channelType = this.channelType,
             primarySignalDbm = this.primarySignalDbm,
             signalMetricType = this.signalMetricType,
-            secondarySignalDb = this.secondarySignalDb
+            secondarySignalDb = this.secondarySignalDb,
+            sinrSource = this.sinrSource,
+            estimationMethod = this.estimationMethod,
+            estimationAssumptions = this.estimationAssumptions,
+            sinrConfidence = this.sinrConfidence,
+            qualitativeDiagnostic = this.qualitativeDiagnostic,
+            impliedRssiDbm = this.impliedRssiDbm
         )
     }
 }

@@ -35,6 +35,11 @@ import com.cellscope.drive.telephony.LteBandTable
 import com.cellscope.drive.util.TelecomTimeUtils
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.annotations.IconFactory
+import org.maplibre.android.annotations.Icon
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.annotations.PolygonOptions
 import org.maplibre.android.annotations.Polyline
@@ -1509,19 +1514,61 @@ class DriveMapView @JvmOverloads constructor(
         }
     }
 
+    private val transitionIconCache = mutableMapOf<Int, Icon>()
+
+    private fun getOrCreateTransitionIcon(colorInt: Int): Icon {
+        return transitionIconCache.getOrPut(colorInt) {
+            val size = (16f * resources.displayMetrics.density).toInt().coerceAtLeast(24)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = colorInt
+                style = Paint.Style.FILL
+            }
+            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * resources.displayMetrics.density
+            }
+            val center = size / 2f
+            val radius = (size / 2f) - (2f * resources.displayMetrics.density)
+            canvas.drawCircle(center, center, radius, paint)
+            canvas.drawCircle(center, center, radius, strokePaint)
+            IconFactory.getInstance(context).fromBitmap(bitmap)
+        }
+    }
+
     private fun drawTransitionMarkers(map: MapLibreMap) {
         for (t in transitions) {
             val lat = t.latitude ?: continue
             val lon = t.longitude ?: continue
 
-            val isPingPong = t.details.contains("ping-pong", ignoreCase = true) || t.eventType.contains("PING_PONG", ignoreCase = true)
+            val isPingPong = t.details.contains("ping-pong", ignoreCase = true) || t.eventType.contains("PING_PONG", ignoreCase = true) || t.eventType == "POSSIBLE_HANDOVER"
+            val isConfirmed = t.eventType == "CONFIRMED_HANDOVER"
+            val isIntra = t.eventType.contains("INTRA") || t.details.contains("intra-freq", ignoreCase = true)
+            val isInter = t.eventType.contains("INTER_FREQ") || t.details.contains("inter-freq", ignoreCase = true)
+            val isRat = t.eventType.contains("RAT") || t.details.contains("inter-rat", ignoreCase = true)
+
             val title = when {
                 isPingPong -> "[PING-PONG] PCI ${t.fromPci ?: "?"} ↔ PCI ${t.toPci ?: "?"}"
-                t.eventType == "CONFIRMED_HANDOVER" -> "[HANDOVER] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
+                isConfirmed -> "[CONFIRMED HANDOVER] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
+                isRat -> "[INTER-RAT TRANSITION] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
+                isIntra -> "[INTRA-FREQUENCY TRANSITION] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
+                isInter -> "[INTER-FREQUENCY TRANSITION] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
                 t.eventType == "CELL_RESELECTION" -> "[CELL RESELECTION] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
                 t.eventType == "SIGNAL_LOSS" -> "[SIGNAL LOSS] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
-                else -> "[HANDOVER] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
+                else -> "[OBSERVED CELL CHANGE] PCI ${t.fromPci ?: "?"} → PCI ${t.toPci ?: "?"}"
             }
+
+            val markerColor = when {
+                isConfirmed -> Color.parseColor("#00E676") // Green (#00E676)
+                isPingPong -> Color.parseColor("#EC4899")  // Pink
+                isRat -> Color.parseColor("#FF9100")       // Orange
+                isIntra -> Color.parseColor("#00E5FF")     // Cyan
+                isInter -> Color.parseColor("#3B82F6")     // Blue
+                else -> Color.parseColor("#94A3B8")        // Slate
+            }
+
             val deltaStr = if (t.fromRsrp != null && t.toRsrp != null) {
                 val d = t.toRsrp - t.fromRsrp
                 " (${t.fromRsrp} → ${t.toRsrp} dBm, Δ${if (d >= 0) "+$d" else "$d"} dB)"
@@ -1533,6 +1580,7 @@ class DriveMapView @JvmOverloads constructor(
                     .position(LatLng(lat, lon))
                     .title(title)
                     .snippet(snippet)
+                    .icon(getOrCreateTransitionIcon(markerColor))
             )
             transitionMarkers.add(marker)
         }
@@ -1907,7 +1955,7 @@ class DriveMapView @JvmOverloads constructor(
         } else "—"
 
         tvInspectMetrics.text = "Pre RSRP: $fromRsrpStr  |  Post RSRP: $toRsrpStr  |  Δ: $deltaRsrp"
-        tvInspectMetrics.setTextColor(if (t.eventType == "CONFIRMED_HANDOVER") Color.parseColor("#00E676") else Color.parseColor("#00E5FF"))
+        tvInspectMetrics.setTextColor(if (t.eventType == "CONFIRMED_HANDOVER" || t.details.contains("confirmed", ignoreCase = true)) Color.parseColor("#00E676") else Color.parseColor("#00E5FF"))
 
         val timeStr = "${TelecomTimeUtils.isoToBdtTimeOnly(t.timestampIso, includeMillis = true)} (BST)"
         val locStr = String.format(Locale.US, "%.5f°N, %.5f°E", t.latitude ?: 0.0, t.longitude ?: 0.0)

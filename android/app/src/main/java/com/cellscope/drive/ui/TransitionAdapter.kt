@@ -37,13 +37,28 @@ class TransitionAdapter(
     class TransitionViewHolder(private val binding: ItemTransitionBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(t: CellTransitionEntity) {
             val ctx = binding.root.context
-            binding.tvTransitionType.text = t.eventType.replace("_", " ")
+            val displayLabel = when (t.eventType.uppercase(Locale.US)) {
+                "CONFIRMED_HANDOVER" -> "CONFIRMED HANDOVER"
+                "INTRA_FREQ", "INTRA_FREQUENCY" -> "INTRA-FREQUENCY TRANSITION"
+                "INTER_FREQ", "INTER_FREQUENCY" -> "INTER-FREQUENCY TRANSITION"
+                "INTER_RAT", "RAT_MOBILITY" -> "INTER-RAT TRANSITION"
+                "CELL_RESELECTION" -> "CELL RESELECTION"
+                "OBSERVED_CELL_CHANGE", "OBSERVED_TRANSITION" -> "OBSERVED CELL CHANGE"
+                "PING_PONG", "POSSIBLE_HANDOVER" -> "PING-PONG CANDIDATE"
+                "SIGNAL_LOSS" -> "SIGNAL LOSS"
+                else -> t.eventType.replace("_", " ")
+            }
+            binding.tvTransitionType.text = displayLabel
 
-            val badgeColor = when (t.eventType) {
+            val badgeColor = when (t.eventType.uppercase(Locale.US)) {
                 "CONFIRMED_HANDOVER" -> R.color.rf_excellent
-                "OBSERVED_TRANSITION" -> R.color.rf_good
+                "INTRA_FREQ", "INTRA_FREQUENCY" -> R.color.rf_good
+                "INTER_FREQ", "INTER_FREQUENCY" -> R.color.rf_good
+                "INTER_RAT", "RAT_MOBILITY" -> R.color.rf_fair
                 "CELL_RESELECTION" -> R.color.rf_fair
-                else -> R.color.rf_poor
+                "PING_PONG", "POSSIBLE_HANDOVER" -> R.color.rf_poor
+                "SIGNAL_LOSS" -> R.color.rf_poor
+                else -> R.color.rf_fair
             }
             binding.tvTransitionType.backgroundTintList = ContextCompat.getColorStateList(ctx, badgeColor)
 

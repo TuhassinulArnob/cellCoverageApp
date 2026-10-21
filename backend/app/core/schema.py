@@ -33,6 +33,13 @@ class MeasurementPoint(BaseModel):
     eci: Optional[int] = None
     altitude_m: Optional[float] = None
     anomaly_label: Optional[str] = None
+    sinr_source: str = "UNAVAILABLE"
+    estimation_method: Optional[str] = None
+    estimation_assumptions: Optional[str] = None
+    sinr_confidence: Optional[str] = None
+    qualitative_diagnostic: Optional[str] = None
+    implied_rssi_dbm: Optional[float] = None
+    bandwidth_khz: Optional[int] = None
 
 
 class DistributionStats(BaseModel):
@@ -91,7 +98,21 @@ class CellTransitionEvent(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     is_handover_trigger: bool = False
-    event_type: str = "CELL_CHANGE"
+    event_type: str = "OBSERVED_TRANSITION"
+    from_rat: Optional[str] = None
+    to_rat: Optional[str] = None
+    from_channel: Optional[int] = None
+    to_channel: Optional[int] = None
+    from_cell_id: Optional[int] = None
+    to_cell_id: Optional[int] = None
+    from_signal_dbm: Optional[float] = None
+    to_signal_dbm: Optional[float] = None
+    delta_signal_db: Optional[float] = None
+    from_tac: Optional[int] = None
+    to_tac: Optional[int] = None
+    confidence_label: str = "HIGH"
+    confidence_score: Optional[float] = None
+    classification_reason: str = ""
     details: str = ""
 
 
@@ -172,6 +193,27 @@ class QoeTestRecord(BaseModel):
     data_provenance: str = "MEASURED"
 
 
+class HourlyProfile(BaseModel):
+    hour: int
+    hour_label: str
+    test_count: int
+    avg_download_mbps: Optional[float] = None
+    min_download_mbps: Optional[float] = None
+    max_download_mbps: Optional[float] = None
+    avg_upload_mbps: Optional[float] = None
+    min_upload_mbps: Optional[float] = None
+    max_upload_mbps: Optional[float] = None
+    avg_ping_ms: Optional[float] = None
+
+
+class SummaryInsight(BaseModel):
+    category: str
+    title: str
+    description: str
+    severity: str = "info"  # info, good, warning, critical
+    confidence: str = "HIGH"
+
+
 class QoePerformanceSummary(BaseModel):
     total_tests: int = 0
     completed_tests: int = 0
@@ -183,16 +225,22 @@ class QoePerformanceSummary(BaseModel):
     min_ping_ms: Optional[float] = None
     max_ping_ms: Optional[float] = None
     median_ping_ms: Optional[float] = None
+    rtt_p90_ms: Optional[float] = None
+    rtt_p95_ms: Optional[float] = None
     avg_jitter_ms: Optional[float] = None
     avg_packet_loss_pct: Optional[float] = None
     avg_download_mbps: Optional[float] = None
+    median_download_mbps: Optional[float] = None
     min_download_mbps: Optional[float] = None
     max_download_mbps: Optional[float] = None
     avg_upload_mbps: Optional[float] = None
+    median_upload_mbps: Optional[float] = None
     min_upload_mbps: Optional[float] = None
     max_upload_mbps: Optional[float] = None
     total_download_bytes: int = 0
     total_upload_bytes: int = 0
+    hourly_profiles: List[HourlyProfile] = Field(default_factory=list)
+    summary_insights: List[SummaryInsight] = Field(default_factory=list)
 
 
 class DatasetSummary(BaseModel):
@@ -233,6 +281,10 @@ class DatasetSummary(BaseModel):
     telemetry_gaps_count: int = 0
     missing_values_summary: Dict[str, int] = Field(default_factory=dict)
     measurement_provenance: Dict[str, Any] = Field(default_factory=dict)
+    sinr_provenance_summary: Dict[str, int] = Field(default_factory=dict)
+    estimated_sinr_count: int = 0
+    measured_sinr_count: int = 0
+    unavailable_sinr_count: int = 0
     qoe_summary: Optional[QoePerformanceSummary] = None
 
 

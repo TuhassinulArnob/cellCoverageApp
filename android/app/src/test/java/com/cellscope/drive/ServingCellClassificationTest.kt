@@ -208,4 +208,57 @@ class ServingCellClassificationTest {
         assertEquals(2, neighborCount)
         assertEquals(total, servingCount + secondaryCount + unconfirmedCount + neighborCount)
     }
+
+    @Test
+    fun testDualSim_ActiveDataSubscriptionPlmnPrioritizedOverStandbySim() {
+        // Dual-SIM: Standby Banglalink has -85 dBm (stronger), Active Data Robi has -102 dBm
+        val candidates = listOf(
+            RawCellCandidate(
+                pci = 444,
+                tac = 18452,
+                eci = 2849102,
+                earfcn = 1600,
+                rsrpDbm = -85,
+                isRegistered = true,
+                operatorNumeric = "47003"
+            ),
+            RawCellCandidate(
+                pci = 177,
+                tac = 18450,
+                eci = 2849100,
+                earfcn = 1399,
+                rsrpDbm = -102,
+                isRegistered = true,
+                operatorNumeric = "47002"
+            ),
+            RawCellCandidate(
+                pci = 178,
+                earfcn = 1399,
+                rsrpDbm = -108,
+                isRegistered = false,
+                operatorNumeric = "47002"
+            )
+        )
+
+        // Classify with Robi as preferred data PLMN
+        val classified = ServingCellClassifier.classify(candidates, preferredPlmn = "47002")
+
+        val robiCell = classified.find { it.pci == 177 }
+        val blCell = classified.find { it.pci == 444 }
+        val neighbor = classified.find { it.pci == 178 }
+
+        assertNotNull(robiCell)
+        assertNotNull(blCell)
+        assertNotNull(neighbor)
+
+        // Robi MUST be PRIMARY_SERVING because it matches preferredPlmn
+        assertEquals(ServingStatus.PRIMARY_SERVING, robiCell?.servingStatus)
+        assertTrue(robiCell?.isServing == true)
+
+        // Banglalink MUST NOT be PRIMARY_SERVING; it becomes SERVING_UNCONFIRMED
+        assertEquals(ServingStatus.SERVING_UNCONFIRMED, blCell?.servingStatus)
+
+        // Neighbor remains NEIGHBOR
+        assertEquals(ServingStatus.NEIGHBOR, neighbor?.servingStatus)
+    }
 }

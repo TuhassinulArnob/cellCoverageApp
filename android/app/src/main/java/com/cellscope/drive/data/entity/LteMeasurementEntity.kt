@@ -67,6 +67,12 @@ data class LteMeasurementEntity(
     val channelType: String? = null,
     val primarySignalDbm: Int? = null,
     val signalMetricType: String? = null,
-    val secondarySignalDb: Double? = null
+    val secondarySignalDb: Double? = null,
+    val sinrSource: String = "UNAVAILABLE",
+    val estimationMethod: String? = null,
+    val estimationAssumptions: String? = null,
+    val sinrConfidence: String? = null,
+    val qualitativeDiagnostic: String? = null,
+    val impliedRssiDbm: Double? = null
 )
 

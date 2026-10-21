@@ -164,7 +164,7 @@ export const LTE_BANDS: BandDefinition[] = [
  * Resolves 3GPP TS 36.101 Band and Downlink/Uplink Frequency from EARFCN.
  */
 export function resolveEarfcn(earfcn: number | null | undefined): FrequencyResult | null {
-  if (earfcn === null || earfcn === undefined || earfcn <= 0) return null;
+  if (earfcn === null || earfcn === undefined || earfcn < 0) return null;
 
   const band = LTE_BANDS.find((b) => earfcn >= b.dlEarfcnMin && earfcn <= b.dlEarfcnMax);
   if (!band) return null;
@@ -272,22 +272,37 @@ export function analyzePciMod3Collisions(points: MeasurementPoint[]): PciMod3Col
  * Estimates cell site tower centroid locations based on RF power-weighted triangulation.
  */
 export function estimateCellSites(points: MeasurementPoint[]): EstimatedCellSite[] {
-  const cellGroups = new Map<number, MeasurementPoint[]>();
+  const cellGroups = new Map<string, MeasurementPoint[]>();
 
   for (const p of points) {
     if (p.has_valid_gps && p.latitude !== null && p.longitude !== null && p.serving_cell_id !== null) {
       const pci = p.serving_cell_id;
-      if (!cellGroups.has(pci)) {
-        cellGroups.set(pci, []);
+      let siteKey: string;
+      if (p.eci && p.eci > 0) {
+        const enodeb = Math.floor(p.eci / 256);
+        siteKey = `enb_${enodeb}_pci_${pci}`;
+      } else if (p.tac && p.tac > 0) {
+        siteKey = `tac_${p.tac}_pci_${pci}`;
+      } else {
+        siteKey = `pci_${pci}`;
       }
-      cellGroups.get(pci)!.push(p);
+
+      if (!cellGroups.has(siteKey)) {
+        cellGroups.set(siteKey, []);
+      }
+      cellGroups.get(siteKey)!.push(p);
     }
   }
 
   const sites: EstimatedCellSite[] = [];
 
-  for (const [pci, cellPoints] of cellGroups.entries()) {
+  for (const [siteKey, cellPoints] of cellGroups.entries()) {
     if (cellPoints.length === 0) continue;
+
+    const pci = cellPoints[0].serving_cell_id!;
+    const eci = cellPoints.find((p) => p.eci !== null && p.eci !== undefined)?.eci ?? null;
+    const enodeb_id = eci !== null ? Math.floor(eci / 256) : null;
+    const tac = cellPoints.find((p) => p.tac !== null && p.tac !== undefined)?.tac ?? null;
 
     let sumWeight = 0;
     let weightedLat = 0;
@@ -332,6 +347,10 @@ export function estimateCellSites(points: MeasurementPoint[]): EstimatedCellSite
 
     sites.push({
       pci,
+      eci,
+      enodeb_id,
+      tac,
+      siteKey,
       latitude: Math.round(estimatedLat * 1e6) / 1e6,
       longitude: Math.round(estimatedLon * 1e6) / 1e6,
       sampleCount: cellPoints.length,

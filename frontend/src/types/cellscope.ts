@@ -29,6 +29,13 @@ export interface MeasurementPoint {
   eci?: number | null;
   altitude_m?: number | null;
   anomaly_label?: string | null;
+  sinr_source?: 'MEASURED' | 'ESTIMATED' | 'UNAVAILABLE';
+  estimation_method?: string | null;
+  estimation_assumptions?: string | null;
+  sinr_confidence?: string | null;
+  qualitative_diagnostic?: string | null;
+  implied_rssi_dbm?: number | null;
+  bandwidth_khz?: number | null;
 }
 
 export interface DistributionStats {
@@ -84,6 +91,20 @@ export interface CellTransitionEvent {
   timestamp_raw: string;
   from_pci: number | null;
   to_pci: number | null;
+  from_rat?: string | null;
+  to_rat?: string | null;
+  from_channel?: number | null;
+  to_channel?: number | null;
+  from_cell_id?: number | null;
+  to_cell_id?: number | null;
+  from_signal_dbm?: number | null;
+  to_signal_dbm?: number | null;
+  delta_signal_db?: number | null;
+  from_tac?: number | null;
+  to_tac?: number | null;
+  confidence_label?: string | null;
+  confidence_score?: number | null;
+  classification_reason?: string | null;
   latitude: number | null;
   longitude: number | null;
   is_handover_trigger: boolean;
@@ -169,6 +190,10 @@ export interface DatasetSummary {
   telemetry_gaps_count?: number;
   missing_values_summary?: Record<string, number>;
   measurement_provenance?: Record<string, any>;
+  sinr_provenance_summary?: Record<string, number>;
+  estimated_sinr_count?: number;
+  measured_sinr_count?: number;
+  unavailable_sinr_count?: number;
   qoe_summary?: QoePerformanceSummary | null;
 }
 
@@ -209,6 +234,27 @@ export interface QoeTestRecord {
   data_provenance: string;
 }
 
+export interface HourlyProfile {
+  hour: number;
+  hour_label: string;
+  test_count: number;
+  avg_download_mbps: number | null;
+  min_download_mbps: number | null;
+  max_download_mbps: number | null;
+  avg_upload_mbps: number | null;
+  min_upload_mbps: number | null;
+  max_upload_mbps: number | null;
+  avg_ping_ms: number | null;
+}
+
+export interface SummaryInsight {
+  category: string;
+  title: string;
+  description: string;
+  severity: 'info' | 'good' | 'warning' | 'critical';
+  confidence: string;
+}
+
 export interface QoePerformanceSummary {
   total_tests: number;
   completed_tests: number;
@@ -220,16 +266,22 @@ export interface QoePerformanceSummary {
   min_ping_ms: number | null;
   max_ping_ms: number | null;
   median_ping_ms: number | null;
+  rtt_p90_ms?: number | null;
+  rtt_p95_ms?: number | null;
   avg_jitter_ms: number | null;
   avg_packet_loss_pct: number | null;
   avg_download_mbps: number | null;
+  median_download_mbps?: number | null;
   min_download_mbps: number | null;
   max_download_mbps: number | null;
   avg_upload_mbps: number | null;
+  median_upload_mbps?: number | null;
   min_upload_mbps: number | null;
   max_upload_mbps: number | null;
   total_download_bytes: number;
   total_upload_bytes: number;
+  hourly_profiles?: HourlyProfile[];
+  summary_insights?: SummaryInsight[];
 }
 
 export interface ExtendedDatasetAnalysis {
@@ -261,7 +313,7 @@ export interface AvailableDatasetInfo {
   description: string;
 }
 
-export type ActiveMetric = 'rsrp' | 'rsrq' | 'cinr' | 'pci' | 'ta' | 'tech' | 'speed';
+export type ActiveMetric = 'rsrp' | 'rsrq' | 'cinr' | 'sinr' | 'pci' | 'ta' | 'tech' | 'speed';
 
 export interface FilterState {
   servingCellId: number | null;
@@ -286,6 +338,10 @@ export interface MapOverlayState {
 
 export interface EstimatedCellSite {
   pci: number;
+  eci?: number | null;
+  enodeb_id?: number | null;
+  tac?: number | null;
+  siteKey?: string;
   latitude: number;
   longitude: number;
   sampleCount: number;

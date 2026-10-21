@@ -68,7 +68,7 @@ object CapacityRecommendationEngine {
         val rsrqList = validMeasurements.mapNotNull { it.rsrqDb }
 
         val avgRsrp = if (rsrpList.isNotEmpty()) rsrpList.average() else -100.0
-        val avgSinr = if (sinrList.isNotEmpty()) sinrList.average() else 0.0
+        val avgSinr: Double? = if (sinrList.isNotEmpty()) sinrList.average() else null
         val avgRsrq = if (rsrqList.isNotEmpty()) rsrqList.average() else -15.0
 
         val weakCount = rsrpList.count { it < -105 }
@@ -191,7 +191,7 @@ object CapacityRecommendationEngine {
                     evidenceUsed = listOf(
                         "Transition density: ${transitions.size} cell changes across survey",
                         "Pilot pollution indicator count: $hasPilotPollution",
-                        "Mean SINR: ${String.format(Locale.US, "%.1f dB", avgSinr)}"
+                        "Mean SINR: ${avgSinr?.let { String.format(Locale.US, "%.1f dB", it) } ?: "Unavailable"}"
                     ),
                     missingEvidenceDisclosed = listOf(
                         "Mechanical and electrical down-tilt (RET) values of active antennas",
@@ -210,7 +210,7 @@ object CapacityRecommendationEngine {
         }
 
         // Recommendation 5: Interference Investigation
-        if (avgSinr < 3.0 && avgRsrp >= -95.0) {
+        if (avgSinr != null && avgSinr < 3.0 && avgRsrp >= -95.0) {
             recommendations.add(
                 EngineeringRecommendation(
                     category = RecommendationCategory.INTERFERENCE_INVESTIGATION,

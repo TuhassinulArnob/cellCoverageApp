@@ -40,7 +40,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
     const earfcnMap = new Map<number, { count: number; pcis: Set<number>; rsrpSum: number }>();
 
     for (const m of measurements) {
-      if (m.earfcn !== null && m.earfcn !== undefined && m.earfcn > 0) {
+      if (m.earfcn !== null && m.earfcn !== undefined && m.earfcn >= 0) {
         const curr = earfcnMap.get(m.earfcn) || { count: 0, pcis: new Set<number>(), rsrpSum: 0 };
         curr.count++;
         if (m.serving_cell_id !== null) curr.pcis.add(m.serving_cell_id);
@@ -205,11 +205,11 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
           subtitle={summary.has_gps ? `${summary.records_with_gps} GPS fixes` : 'Non-GPS log'}
         />
         <KpiCard
-          title="HO Triggers"
+          title="Confirmed HO"
           value={summary.handover_trigger_count}
           unit={`(${summary.handover_trigger_rate_pct}%)`}
           icon={Zap}
-          subtitle={`${summary.handover_trigger_count} handover events`}
+          subtitle={`${summary.handover_trigger_count} confirmed handovers`}
         />
         <KpiCard
           title="Unique PCIs"
@@ -424,7 +424,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
             <div className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400">
               {summary.handover_trigger_rate_pct}%
             </div>
-            <span className="text-[10px] text-slate-500">{summary.handover_trigger_count} total handovers</span>
+            <span className="text-[10px] text-slate-500">{summary.handover_trigger_count} confirmed handovers</span>
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-lg">
@@ -444,6 +444,67 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
         {renderDistributionBar('RSRP Coverage', summary.rsrp_distribution, summary.total_records)}
         {renderDistributionBar('RSRQ Quality', summary.rsrq_distribution, summary.total_records)}
         {renderDistributionBar('CINR / SINR Ratio', summary.cinr_distribution, summary.total_records)}
+      </div>
+
+      {/* SINR Provenance & Diagnostics Engine Panel */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-150">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Gauge className="w-4 h-4 text-amber-500" />
+            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">
+              SINR Diagnostics &amp; Radio Model Provenance
+            </h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-mono">
+              MEASURED: {summary.measured_sinr_count ?? summary.sinr_provenance_summary?.MEASURED ?? 0}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-mono">
+              ESTIMATED ⓘ: {summary.estimated_sinr_count ?? summary.sinr_provenance_summary?.ESTIMATED ?? 0}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 font-mono">
+              UNAVAILABLE: {summary.unavailable_sinr_count ?? summary.sinr_provenance_summary?.UNAVAILABLE ?? 0}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-lg p-3.5 space-y-2">
+            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <span>3GPP TS 36.214 Estimation Methodology</span>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              When Android baseband modem does not expose physical RSSNR hardware registers, LTE SINR is calculated using the 3GPP carrier RSSI relationship:
+            </p>
+            <div className="bg-white dark:bg-slate-900 rounded p-2 text-xs font-mono text-cyan-700 dark:text-cyan-400 border border-slate-200 dark:border-slate-800">
+              RSRQ_linear = N × RSRP_linear / RSSI_linear<br />
+              SINR_est = 10 × log10(12 / (1/RSRQ_linear - 7.0))
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Assumes nominal 50% cell traffic load factor (η = 0.5), uniform subcarrier interference, and flat Rayleigh fading.
+            </p>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-lg p-3.5 space-y-2">
+            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <span>Engineering Integrity &amp; 5G Separation</span>
+            </div>
+            <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5">
+              <li className="flex items-start gap-1.5">
+                <span className="text-amber-500 font-bold">•</span>
+                <span><strong>Uncertainty Bound:</strong> Estimated SINR carries an explicit ±3.5 dB error bound due to unmeasured dynamic PRB scheduling.</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-emerald-500 font-bold">•</span>
+                <span><strong>5G NR Standard Separation:</strong> 3GPP TS 38.215 NR SS-RSRQ definition does not obey the LTE carrier RSSI equation. NR SINR is only reported when genuinely measured by modem (SS-SINR/CSI-SINR).</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-sky-500 font-bold">•</span>
+                <span><strong>Zero Fabrication:</strong> Missing values remain labeled UNAVAILABLE rather than silently guessed.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       {/* Per-Cell Statistics Table */}
