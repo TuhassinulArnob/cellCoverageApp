@@ -27,7 +27,7 @@ class SignalQualityScatterView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private data class ScatterPoint(val rsrp: Int, val rsrq: Int, val rat: String)
+    private data class ScatterPoint(val rsrp: Int, val rsrq: Int, val rat: String, val isSuspectClamp: Boolean = false)
     private var points: List<ScatterPoint> = emptyList()
     private var missingCount: Int = 0
     private var pearsonR: Double? = null
@@ -84,11 +84,16 @@ class SignalQualityScatterView @JvmOverloads constructor(
     fun setData(measurements: List<LteMeasurementEntity>) {
         val valid = measurements
             .filter { it.rsrpDbm != null && it.rsrqDb != null }
-            .map { ScatterPoint(it.rsrpDbm!!, it.rsrqDb!!, it.servingRat ?: it.networkGen ?: "4G") }
+            .map {
+                val isSuspect = com.cellscope.drive.analytics.RadioQualityEngine.isSuspectBasebandClamp(
+                    it.rsrpDbm, it.rsrqDb, it.rssiDbm, it.networkType, it.servingRat
+                )
+                ScatterPoint(it.rsrpDbm!!, it.rsrqDb!!, it.servingRat ?: it.networkGen ?: "4G", isSuspect)
+            }
 
         points = valid
         missingCount = measurements.size - valid.size
-        clampCount = valid.count { it.rsrp == -44 }
+        clampCount = valid.count { it.isSuspectClamp }
 
         // Compute Pearson's correlation coefficient r
         if (valid.size >= 5) {
@@ -201,7 +206,7 @@ class SignalQualityScatterView @JvmOverloads constructor(
             val x = paddingLeft + (xNorm * plotW).toFloat()
             val y = paddingTop + (plotH * (1.0 - yNorm)).toFloat()
 
-            if (pt.rsrp == -44) {
+            if (pt.isSuspectClamp) {
                 canvas.drawCircle(x, y, 5f, clampedPointPaint)
             } else {
                 canvas.drawCircle(x, y, 4.5f, pointPaint)

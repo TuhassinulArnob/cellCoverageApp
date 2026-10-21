@@ -37,7 +37,8 @@ data class ObservedCell(
     val estimationAssumptions: String? = null,
     val sinrConfidence: String? = null,
     val qualitativeDiagnostic: String? = null,
-    val impliedRssiDbm: Double? = null
+    val impliedRssiDbm: Double? = null,
+    val ageMs: Long = 0L
 ) {
     val isMeasuredSinr: Boolean
         get() = sinrSource == "MEASURED"

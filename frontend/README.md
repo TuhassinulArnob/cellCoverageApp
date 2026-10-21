@@ -26,6 +26,7 @@ frontend/src/
 │   ├── MapView.tsx              # Multi-layer GIS map, popups & point inspector
 │   ├── SummaryStats.tsx         # Executive KPI cards, 3GPP distributions & CRS Mod-3
 │   ├── RfAnalyticsPanel.tsx     # RF charts, carrier frequency table & signal bands
+│   ├── RadioPropagationPanel.tsx # Radio Propagation & Mobility Analysis (Shadowing, Fluctuation, Multipath, Ping-Pong)
 │   ├── EventsAndAnomalies.tsx   # Normalized cell transitions & anomaly alerts
 │   ├── NetworkPerformancePanel.tsx # Active QoE throughput, latency, jitter & loss
 │   ├── DataQualityPanel.tsx     # Missing coordinates, telemetry gaps & provenance
@@ -37,7 +38,8 @@ frontend/src/
 ├── types/
 │   └── cellscope.ts             # TypeScript definitions matching backend Pydantic schemas
 └── utils/
-    └── telecom.ts               # 3GPP TS 36.101/38.101 formulas, EARFCN raster, CRS Mod-3
+    ├── telecom.ts               # 3GPP TS 36.101/38.101 formulas, EARFCN raster, CRS Mod-3
+    └── propagationAnalytics.ts  # Shadowing, Fluctuation, Multipath & Ping-Pong algorithms
 ```
 
 ---
@@ -72,6 +74,38 @@ frontend/src/
 
 ### 3.5 Executive Technical Report Exporter (`components/ReportExporter.tsx`)
 * Generates an audit-ready, paginated A4 summary report suitable for executive review and network planning sign-off.
+
+### 3.6 Radio Propagation & Mobility Analysis Suite (`components/RadioPropagationPanel.tsx`)
+A dedicated analytical suite integrating four specialized physical propagation and mobility modules:
+
+1. **Shadowing Analysis:**
+   - Evaluates slow signal variation over traveled distance using configurable spatial moving average windows ($W \in \{5, 10, 20\}$).
+   - Computes empirical linear distance baseline regression: $\text{RSRP}_{\text{trend}}(d) = \beta_0 + \beta_1 d$.
+   - Calculates residual variation $\text{Residual}_i = \text{RSRP}_i - \overline{\text{RSRP}}_i$ and log-normal shadowing standard deviation $\sigma_\psi$.
+   - Highlights candidate localized obstruction zones ($\le -6\text{ dB}$ sustained residual for $\ge 3$ consecutive samples) on an interactive Leaflet mini-map and data table with one-click GIS navigation.
+
+2. **Signal Fluctuation Analysis:**
+   - Computes consecutive sample-to-sample deltas ($\Delta\text{RSRP}$ in dB) and rolling standard deviation ($\sigma$).
+   - Statistical distribution metrics: Min, Max, Mean, Median, P10, P90, and Interquartile Range (IQR).
+   - **Sampling Rate Validation:** Audits underlying logging periodicity ($\Delta t$) and jitter. Discloses that ~1 Hz sampling characterizes macroscopic signal fluctuations rather than microscopic sub-wavelength Rayleigh fast fading ($\lambda \approx 16.6\text{ cm}$ at 1.8 GHz).
+
+3. **Multipath Propagation Analysis:**
+   - Calculates spatial rate-of-change gradient $|\Delta\text{RSRP}| / \Delta d$ (dB/meter) along the traveled path.
+   - Flags rapid spatial variation ($> 0.4\text{ dB/m}$) in the absence of cell handovers.
+   - **Revisited Location Clustering:** Detects GPS fixes revisited within a $20\text{m}$ radius across time ($\Delta t \ge 15\text{s}$) to evaluate identical-location signal repeatability and scattering.
+   - Discloses that commercial UEs cannot output Channel Impulse Responses (CIR) or Angle of Arrival (AoA), designating the feature as exploratory spatial analysis.
+
+4. **Ping-Pong Handover Oscillation Analysis:**
+   - Detects $A \rightarrow B \rightarrow A$ serving cell oscillations using configurable evaluation windows ($\Delta t \le 5\text{s}, 10\text{s}, 15\text{s}, 30\text{s}, 60\text{s}$).
+   - Measures intermediate cell dwell times ($\Delta t_{\text{dwell}}$), departure/return signal levels, and transition distance.
+   - Rigorously discriminates between `CONFIRMED_PING_PONG` (with network handover trigger) and `INFERRED_PING_PONG_OSCILLATION` (periodic snapshot reselection).
+   - Renders serving cell step charts over time, an interactive transition vector map, and a cell-pair transition frequency matrix.
+
+*Each primary visualization features a data-driven 4-subheading scientific explanation:*
+- **What the graph shows**
+- **Telecom interpretation**
+- **Why it matters**
+- **Limitations and confidence**
 
 ---
 

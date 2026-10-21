@@ -28,7 +28,9 @@ data class OperatorIdentity(
     val dataConnectionState: String = "CONNECTED",
     val dataSubscriptionId: Int? = null,
     val isStale: Boolean = false,
-    val activeRat: String = "LTE"
+    val activeRat: String = "LTE",
+    val channelNumber: Int? = null,
+    val channelType: String? = null
 ) {
     val simResolvedName: String
         get() = BangladeshMccMnc.resolveOperatorName(simOperatorNumeric, simOperatorName)
@@ -69,13 +71,14 @@ data class OperatorIdentity(
         }
 
     val derivedEnodebId: Int?
-        get() = eci?.let { it / 256 }
+        get() = if (activeRat == "4G" || activeRat == "LTE") eci?.let { it / 256 } else null
 
     val derivedSectorId: Int?
-        get() = eci?.let { it % 256 }
+        get() = if (activeRat == "4G" || activeRat == "LTE") eci?.let { it % 256 } else null
 
     val ecgi: String?
         get() {
+            if (activeRat != "4G" && activeRat != "LTE") return null
             val plmn = servingOperatorNumeric ?: networkOperatorNumeric
             return if (plmn != null && plmn.length >= 5 && eci != null) {
                 val clean = plmn.replace("-", "")
@@ -85,13 +88,77 @@ data class OperatorIdentity(
             } else null
         }
 
+    val cgi: String?
+        get() {
+            if (activeRat != "2G" && !activeRat.contains("GSM", ignoreCase = true)) return null
+            val plmn = servingOperatorNumeric ?: networkOperatorNumeric
+            return if (plmn != null && plmn.length >= 5 && eci != null && tac != null) {
+                val clean = plmn.replace("-", "")
+                val mcc = clean.take(3)
+                val mnc = clean.substring(3)
+                "$mcc-$mnc-$tac-$eci"
+            } else null
+        }
+
     val derivedBand: LteBandTable.FrequencyResult?
-        get() = LteBandTable.resolveEarfcn(earfcn)
+        get() = if (activeRat == "4G" || activeRat == "LTE") LteBandTable.resolveEarfcn(channelNumber ?: earfcn) else null
 
     val derivedBandText: String
-        get() = derivedBand?.let {
-            "Band ${it.bandNumber} (${it.designation}) • DL ${it.dlFrequencyMhz} MHz"
-        } ?: (earfcn?.let { "EARFCN $it" } ?: "Carrier: Unmapped")
+        get() = when {
+            activeRat == "2G" || activeRat.contains("GSM", ignoreCase = true) || channelType == "ARFCN" -> {
+                val arfcn = channelNumber ?: earfcn
+                if (arfcn != null) {
+                    val info = CellularBandResolver.resolveGsm(
+                        com.cellscope.drive.model.ObservedCell(
+                            pci = servingPci,
+                            channelNumber = arfcn,
+                            servingRat = "2G",
+                            networkType = "2G_GSM",
+                            channelType = "ARFCN"
+                        )
+                    )
+                    info?.let { "${it.bandName} • ARFCN $arfcn • DL: ${it.dlCenterFreqMhz} MHz" }
+                        ?: "GSM • ARFCN $arfcn"
+                } else "GSM Carrier: ARFCN Unreported"
+            }
+            activeRat == "3G" || activeRat.contains("WCDMA", ignoreCase = true) || channelType == "UARFCN" -> {
+                val uarfcn = channelNumber ?: earfcn
+                if (uarfcn != null) {
+                    val info = CellularBandResolver.resolveWcdma(
+                        com.cellscope.drive.model.ObservedCell(
+                            pci = servingPci,
+                            channelNumber = uarfcn,
+                            servingRat = "3G",
+                            networkType = "3G_WCDMA",
+                            channelType = "UARFCN"
+                        )
+                    )
+                    info?.let { "${it.bandName} • UARFCN $uarfcn • DL: ${it.dlCenterFreqMhz} MHz" }
+                        ?: "3G WCDMA • UARFCN $uarfcn"
+                } else "3G Carrier: UARFCN Unreported"
+            }
+            activeRat == "5G" || activeRat.contains("NR", ignoreCase = true) || channelType == "NR_ARFCN" -> {
+                val nrarfcn = channelNumber ?: earfcn
+                if (nrarfcn != null) {
+                    val info = CellularBandResolver.resolveNr(
+                        com.cellscope.drive.model.ObservedCell(
+                            pci = servingPci,
+                            nrArfcn = nrarfcn,
+                            servingRat = "5G",
+                            networkType = "5G_NR",
+                            channelType = "NR_ARFCN"
+                        )
+                    )
+                    info?.let { "${it.bandName} • NR-ARFCN $nrarfcn • DL: ${it.dlCenterFreqMhz} MHz" }
+                        ?: "5G NR • NR-ARFCN $nrarfcn"
+                } else "5G NR Carrier: Unreported"
+            }
+            else -> {
+                derivedBand?.let {
+                    "Band ${it.bandNumber} (${it.designation}) • DL ${it.dlFrequencyMhz} MHz"
+                } ?: ((channelNumber ?: earfcn)?.let { "EARFCN $it" } ?: "Carrier: Unmapped")
+            }
+        }
 
     fun getFreshnessText(currentTimeMs: Long = System.currentTimeMillis()): String {
         if (isStale) return "Stale (> 15s since scan)"

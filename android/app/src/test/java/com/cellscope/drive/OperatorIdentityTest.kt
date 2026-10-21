@@ -153,11 +153,21 @@ class OperatorIdentityTest {
             networkOperatorNumeric = "47002",
             dataNetworkType = "EDGE",
             activeRat = "2G",
-            servingPci = 54, // BSIC in 2G
+            servingPci = 32, // BSIC in 2G
+            channelNumber = 1021,
+            channelType = "ARFCN",
+            tac = 18452, // LAC in 2G
+            eci = 4567,  // CID in 2G
             earfcn = null
         )
         assertEquals("2G", gsmIdentity.activeRat)
         assertEquals("EDGE", gsmIdentity.dataNetworkType)
+        assertEquals(32, gsmIdentity.servingPci)
+        assertNull("eNodeB ID must be null on 2G GSM", gsmIdentity.derivedEnodebId)
+        assertNull("Sector ID must be null on 2G GSM", gsmIdentity.derivedSectorId)
+        assertNull("ECGI must be null on 2G GSM", gsmIdentity.ecgi)
+        assertEquals("470-02-18452-4567", gsmIdentity.cgi)
+        assertTrue("GSM carrier must resolve correctly", gsmIdentity.derivedBandText.contains("GSM 900") && gsmIdentity.derivedBandText.contains("ARFCN 1021"))
     }
 
     @Test

@@ -69,6 +69,7 @@ import com.cellscope.drive.export.CsvExporter
 import com.cellscope.drive.export.PdfReportExporter
 import java.io.File
 import com.cellscope.drive.model.GpsData
+import com.cellscope.drive.model.NetworkGeneration
 import com.cellscope.drive.model.LteMetrics
 import com.cellscope.drive.model.RecordingState
 import com.cellscope.drive.model.SelectedLocationState
@@ -651,11 +652,81 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSinrDiagnosticsDialog(lte: LteMetrics) {
-        val bwRb = com.cellscope.drive.telephony.SinrDiagnostics.bandwidthToResourceBlocks(lte.bandwidthKhz)
-        val bwStr = lte.bandwidthKhz?.let { "${it / 1000} MHz ($bwRb RBs)" } ?: "10 MHz nominal ($bwRb RBs)"
+        val isGsm = lte.servingRat == "2G" || lte.networkType.contains("GSM", ignoreCase = true)
+        val isWcdma = lte.servingRat == "3G" || lte.networkType.contains("WCDMA", ignoreCase = true) || lte.networkType.contains("UMTS", ignoreCase = true)
+
+        if (isGsm) {
+            val msg = StringBuilder()
+            msg.append("Source Provenance: 2G GSM / EDGE TDMA\n")
+            msg.append("Current Architecture: GSM/GPRS/EDGE (No OFDM SINR)\n\n")
+            msg.append("── Physical Channel Inputs ──\n")
+            msg.append("• Serving RxLev: ${lte.primarySignalDbm ?: lte.rssiDbm ?: "—"} dBm\n")
+            msg.append("• Serving BSIC: ${lte.servingPci ?: "—"}\n")
+            msg.append("• Serving ARFCN: ${lte.channelNumber ?: "—"}\n")
+            msg.append("• Location Area (LAC): ${lte.tac ?: "—"}\n")
+            msg.append("• Cell ID (CID): ${lte.eci ?: "—"}\n\n")
+            msg.append("── Methodology & Radio Model ──\n")
+            msg.append("• 3GPP GSM Specification: 3GPP TS 45.008\n")
+            msg.append("• In 2G GSM, downlink transmission uses Time-Division Multiple Access (TDMA) with Gaussian Minimum Shift Keying (GMSK) or 8-PSK modulation.\n")
+            msg.append("• Signal quality is evaluated via Received Signal Level (RxLev) and Bit Error Rate / Received Signal Quality (RxQual), not OFDM subcarrier SINR.\n")
+            msg.append("• OFDM-based Signal-to-Interference-plus-Noise Ratio (SINR) is mathematically and architecturally specific to 4G LTE and 5G NR networks.\n")
+
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("2G GSM Channel Diagnostics")
+                .setMessage(msg.toString())
+                .setPositiveButton("Close", null)
+                .show()
+            return
+        }
+
+        if (isWcdma) {
+            val msg = StringBuilder()
+            msg.append("Source Provenance: 3G WCDMA / UMTS\n")
+            msg.append("Current Architecture: WCDMA Spread Spectrum (No OFDM SINR)\n\n")
+            msg.append("── Physical Channel Inputs ──\n")
+            msg.append("• Serving CPICH RSCP: ${lte.primarySignalDbm ?: lte.rssiDbm ?: "—"} dBm\n")
+            msg.append("• Serving PSC: ${lte.servingPci ?: "—"}\n")
+            msg.append("• Serving UARFCN: ${lte.channelNumber ?: "—"}\n")
+            msg.append("• Secondary Metric: ${lte.secondarySignalDb?.let { "$it dB" } ?: "Ec/Io Unavailable"}\n\n")
+            msg.append("── Methodology & Radio Model ──\n")
+            msg.append("• 3GPP WCDMA Specification: 3GPP TS 25.133\n")
+            msg.append("• WCDMA uses Direct-Sequence Code-Division Multiple Access (DS-CDMA). Quality is governed by CPICH Received Signal Code Power (RSCP) and Ec/Io (energy per chip to total received power spectral density).\n")
+            msg.append("• OFDM subcarrier SINR is specific to 4G LTE and 5G NR networks.\n")
+
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("3G WCDMA Channel Diagnostics")
+                .setMessage(msg.toString())
+                .setPositiveButton("Close", null)
+                .show()
+            return
+        }
+
+        val validBw = lte.bandwidthKhz?.let { bw ->
+            val normalized = when (bw) {
+                1 -> 1400 // 1.4 MHz (vendor HAL integer MHz)
+                3 -> 3000
+                5 -> 5000
+                10 -> 10000
+                15 -> 15000
+                20 -> 20000
+                else -> bw
+            }
+            normalized.takeIf {
+                it != Integer.MAX_VALUE &&
+                !com.cellscope.drive.telephony.SinrDiagnostics.UNAVAILABLE_SENTINELS.contains(it) &&
+                it in 1400..100000
+            }
+        }
+        val bwRb = com.cellscope.drive.telephony.SinrDiagnostics.bandwidthToResourceBlocks(validBw)
+        val bwStr = if (validBw != null) {
+            "${validBw / 1000} MHz ($bwRb RBs) [Measured from Modem]"
+        } else {
+            "Unknown (modem HAL did not expose bandwidth register; nominal $bwRb RBs used only for wideband RSSI)"
+        }
         val rsrpStr = lte.rsrpDbm?.let { "$it dBm" } ?: "Unavailable"
         val rsrqStr = lte.rsrqDb?.let { "$it dB" } ?: "Unavailable"
-        val rssiStr = lte.rssiDbm?.let { "$it dBm" } ?: lte.impliedRssiDbm?.let { String.format(Locale.US, "%.1f dBm (Implied)", it) } ?: "Unavailable"
+        val modemRssiStr = lte.rssiDbm?.let { "$it dBm [Modem-Measured]" } ?: "Unavailable"
+        val impliedRssiStr = lte.impliedRssiDbm?.let { String.format(Locale.US, "%.1f dBm [Model-Implied: N×RSRP/RSRQ]", it) } ?: "Unavailable"
         val sinrStr = lte.sinrDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "Unavailable"
 
         val msg = StringBuilder()
@@ -665,23 +736,40 @@ class MainActivity : AppCompatActivity() {
         msg.append("── Physical Channel Inputs ──\n")
         msg.append("• Serving RSRP: $rsrpStr\n")
         msg.append("• Serving RSRQ: $rsrqStr\n")
-        msg.append("• Carrier RSSI: $rssiStr\n")
-        msg.append("• Bandwidth: $bwStr\n")
+        msg.append("• Modem RSSI: $modemRssiStr\n")
+        msg.append("• Implied RSSI: $impliedRssiStr\n")
+        msg.append("• Channel Bandwidth: $bwStr\n")
         msg.append("• Serving Cell PCI: ${lte.servingPci ?: "—"} (EARFCN: ${lte.earfcn ?: "—"})\n\n")
+
+        if (lte.rssiDbm != null && lte.rsrpDbm != null && lte.rssiDbm <= lte.rsrpDbm) {
+            msg.append("⚠️ Physical Telemetry Notice: Reported modem RSSI (${lte.rssiDbm} dBm) is physically less than or equal to RSRP (${lte.rsrpDbm} dBm). By 3GPP TS 36.214, wideband carrier RSSI must exceed narrowband RSRP by at least 10×log10(12×N_RB) dB (>= 18.6 dB). This indicates an uninitialized/sentinel modem HAL register (e.g. CSQ ASU 0 = -113 dBm). Model-implied carrier RSSI ($impliedRssiStr) is physically authentic.\n\n")
+        }
 
         msg.append("── Methodology & Radio Model ──\n")
         msg.append("• Method: ${lte.estimationMethod ?: "Standard 3GPP channel evaluation"}\n")
         if (lte.sinrSource == "ESTIMATED") {
             msg.append("• Formula: 3GPP TS 36.214 Carrier RSSI Relation:\n")
-            msg.append("   RSRQ = N × (RSRP / RSSI)\n")
-            msg.append("   SINR_est = 10 × log10(12 / (1/RSRQ_linear - 7.0))\n")
-            msg.append("• Assumptions: 50% cell traffic load factor (η = 0.5), uniform subcarrier interference, flat Rayleigh channel.\n")
-            msg.append("• Estimation Uncertainty: ±3.5 dB error bound due to unmeasured dynamic PRB scheduling.\n\n")
+            msg.append("   RSRQ = N × (RSRP / RSSI) = RSRP / P_RB\n")
+            if (lte.estimationMethod?.contains("BOUNDED_LOAD") == true) {
+                msg.append("   SINR_est = 10 × log10(12 / (1/RSRQ_linear - (2 + 10×η_avg)))\n")
+                msg.append("• Model: Bounded Light-Load Model (for lightly-loaded cells where RSRQ > -8.45 dB).\n")
+            } else {
+                msg.append("   SINR_est = 10 × log10(12 / (1/RSRQ_linear - 7.0))\n")
+                msg.append("• Model: Nominal Load Model (50% traffic load, η = 0.5).\n")
+            }
+            if (lte.estimationAssumptions != null) {
+                msg.append("• Details: ${lte.estimationAssumptions}\n\n")
+            } else {
+                msg.append("• Assumptions: Flat Rayleigh channel, uniform subcarrier interference, dynamic PRB scheduling bounds.\n\n")
+            }
         } else if (lte.sinrSource == "MEASURED") {
             msg.append("• Details: Direct physical hardware measurement reported by device baseband modem RIL (CellSignalStrengthLte.rssnr or 5G SS-SINR).\n\n")
         } else {
-            msg.append("• Reason: Device baseband modem HAL does not expose physical RSSNR register, and physical inputs are incomplete for estimation.\n\n")
+            msg.append("• Reason: ${lte.estimationAssumptions ?: "Device baseband modem HAL does not expose physical RSSNR register, and physical inputs are incomplete or at 3GPP saturation ceiling."}\n\n")
         }
+
+        msg.append("── Bandwidth Mathematical Role ──\n")
+        msg.append("• Bandwidth Independence: Channel bandwidth N cancels out of the SINR equation (RSRQ = RSRP / P_RB). Unknown bandwidth does NOT affect estimated SINR; it only scales wideband RSSI across the whole carrier.\n\n")
 
         msg.append("── Qualitative RF Assessment ──\n")
         msg.append("• ${lte.qualitativeDiagnostic ?: "Channel quality assessment unavailable"}\n")
@@ -2460,19 +2548,54 @@ class MainActivity : AppCompatActivity() {
     private fun updateLteUi(lte: LteMetrics) {
         val opIdentity = recorder.telephonyCollector.getOperatorIdentity()
         val displayOp = opIdentity.getEffectiveDisplayOperator()
-        binding.tvOperatorName.text = when (lte.nrState) {
-            "SA" -> "$displayOp [5G SA]"
-            "NSA" -> "$displayOp [5G NSA]"
+        val rat = lte.servingRat ?: when (lte.networkGen) {
+            NetworkGeneration.GEN_5G -> "5G"
+            NetworkGeneration.GEN_4G -> "4G"
+            NetworkGeneration.GEN_3G -> "3G"
+            NetworkGeneration.GEN_2G -> "2G"
+            else -> "LTE"
+        }
+        val isGsm = rat == "2G" || lte.networkType.contains("GSM", ignoreCase = true)
+        val isWcdma = rat == "3G" || lte.networkType.contains("WCDMA", ignoreCase = true) || lte.networkType.contains("UMTS", ignoreCase = true)
+        val is5g = rat == "5G" || lte.is5gActive
+
+        binding.tvOperatorName.text = when {
+            lte.nrState == "SA" -> "$displayOp [5G SA]"
+            lte.nrState == "NSA" -> "$displayOp [5G NSA]"
+            isGsm -> "$displayOp [2G GSM]"
+            isWcdma -> "$displayOp [3G WCDMA]"
             else -> displayOp
         }
-        binding.tvServingPci.text = lte.servingPci?.let { "PCI $it" } ?: "PCI —"
 
-        if (lte.rsrpDbm != null) {
-            binding.tvRsrp.text = "${lte.rsrpDbm} dBm"
-            val rsrpColor = when (lte.rsrpRating) {
-                "EXCELLENT" -> R.color.rf_excellent
-                "GOOD" -> R.color.rf_good
-                "FAIR" -> R.color.rf_fair
+        // Serving Cell ID badge
+        binding.tvServingPci.text = when {
+            isGsm -> lte.servingPci?.let { "BSIC $it" } ?: "BSIC —"
+            isWcdma -> lte.servingPci?.let { "PSC $it" } ?: "PSC —"
+            is5g -> lte.servingPci?.let { "NR-PCI $it" } ?: "PCI —"
+            else -> lte.servingPci?.let { "PCI $it" } ?: "PCI —"
+        }
+
+        // Primary Signal Metric
+        binding.tvRsrpLabel.text = when {
+            isGsm -> "RxLev: "
+            isWcdma -> "RSCP: "
+            is5g -> "SS-RSRP: "
+            else -> "RSRP: "
+        }
+
+        val primarySignal = when {
+            isGsm -> lte.primarySignalDbm ?: lte.rssiDbm
+            isWcdma -> lte.primarySignalDbm ?: lte.rssiDbm
+            is5g -> lte.primarySignalDbm ?: lte.rsrpDbm ?: lte.csiRsrpDbm
+            else -> lte.rsrpDbm ?: lte.primarySignalDbm
+        }
+
+        if (primarySignal != null) {
+            binding.tvRsrp.text = "$primarySignal dBm"
+            val rsrpColor = when {
+                primarySignal >= -80 -> R.color.rf_excellent
+                primarySignal >= -90 -> R.color.rf_good
+                primarySignal >= -100 -> R.color.rf_fair
                 else -> R.color.rf_poor
             }
             binding.tvRsrp.setTextColor(ContextCompat.getColor(this, rsrpColor))
@@ -2481,62 +2604,131 @@ class MainActivity : AppCompatActivity() {
             binding.tvRsrp.setTextColor(ContextCompat.getColor(this, R.color.on_background))
         }
 
-        val sinrColor = when {
-            lte.sinrDb == null -> R.color.text_secondary
-            lte.sinrDb >= 20.0 -> R.color.rf_excellent
-            lte.sinrDb >= 13.0 -> R.color.rf_good
-            lte.sinrDb >= 0.0 -> R.color.rf_fair
-            else -> R.color.rf_poor
+        // SINR Handling (OFDM specific: LTE & 5G NR)
+        if (isGsm) {
+            binding.tvSinr.text = "GSM (No SINR)"
+            binding.tvSinr.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.tvSinrValue.text = "N/A"
+            binding.tvSinrValue.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.tvSinrSourceBadge.text = "[2G GSM ARCHITECTURE]"
+            binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.tvSinrIndicatorIcon.visibility = View.GONE
+            binding.tvSinrQualitativeDiagnostic.text = "SINR is specific to OFDM (LTE/5G). GSM uses RxLev & RxQual."
+            binding.tvSinrModelDetails.text = "2G TDMA/FDMA architecture. Radio link quality evaluated via RxLev (${primarySignal ?: "—"} dBm) and Bit Error Rate (BER)."
+        } else if (isWcdma) {
+            binding.tvSinr.text = "3G (No SINR)"
+            binding.tvSinr.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.tvSinrValue.text = "N/A"
+            binding.tvSinrValue.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.tvSinrSourceBadge.text = "[3G WCDMA ARCHITECTURE]"
+            binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.tvSinrIndicatorIcon.visibility = View.GONE
+            binding.tvSinrQualitativeDiagnostic.text = "WCDMA uses CPICH RSCP & Ec/Io for downlink quality evaluation."
+            binding.tvSinrModelDetails.text = "3G CDMA spread-spectrum architecture. Downlink performance measured by RSCP and Ec/Io."
+        } else {
+            val sinrColor = when {
+                lte.sinrDb == null -> R.color.text_secondary
+                lte.sinrDb >= 20.0 -> R.color.rf_excellent
+                lte.sinrDb >= 13.0 -> R.color.rf_good
+                lte.sinrDb >= 0.0 -> R.color.rf_fair
+                else -> R.color.rf_poor
+            }
+
+            binding.tvSinr.text = when (lte.sinrSource) {
+                "MEASURED" -> lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [MEASURED]" } ?: "SINR: UNAVAILABLE"
+                "ESTIMATED" -> lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [ESTIMATED ⓘ]" } ?: "SINR: UNAVAILABLE"
+                else -> "SINR: UNAVAILABLE"
+            }
+            binding.tvSinr.setTextColor(ContextCompat.getColor(this, sinrColor))
+
+            binding.tvSinrValue.text = lte.sinrDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "— dB"
+            binding.tvSinrValue.setTextColor(ContextCompat.getColor(this, sinrColor))
+
+            when (lte.sinrSource) {
+                "MEASURED" -> {
+                    binding.tvSinrSourceBadge.text = "[MEASURED]"
+                    binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.rf_excellent))
+                    binding.tvSinrIndicatorIcon.visibility = View.GONE
+                    binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Modem physical baseband measurement"
+                    binding.tvSinrModelDetails.text = "Direct modem hardware RSSNR register. Tap for measurement context."
+                }
+                "ESTIMATED" -> {
+                    binding.tvSinrSourceBadge.text = "[ESTIMATED ⓘ]"
+                    binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.rf_fair))
+                    binding.tvSinrIndicatorIcon.visibility = View.VISIBLE
+                    binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Calibrated radio model estimate"
+                    val rssiStr = lte.impliedRssiDbm?.let { String.format(Locale.US, "%.1f dBm", it) } ?: "—"
+                    binding.tvSinrModelDetails.text = "3GPP TS 36.214 Load Model (Implied RSSI: $rssiStr). Tap to inspect formula."
+                }
+                else -> {
+                    binding.tvSinrSourceBadge.text = "[UNAVAILABLE]"
+                    binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                    binding.tvSinrIndicatorIcon.visibility = View.GONE
+                    binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Modem does not expose hardware SNR"
+                    binding.tvSinrModelDetails.text = "Tap to inspect RF channel conditions and estimation requirements."
+                }
+            }
         }
 
-        binding.tvSinr.text = when (lte.sinrSource) {
-            "MEASURED" -> lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [MEASURED]" } ?: "SINR: UNAVAILABLE"
-            "ESTIMATED" -> lte.sinrDb?.let { "SINR: ${String.format(Locale.US, "%.1f", it)} dB [ESTIMATED ⓘ]" } ?: "SINR: UNAVAILABLE"
-            else -> "SINR: UNAVAILABLE"
+        // Secondary Telephony Metrics
+        binding.tvRsrq.text = when {
+            isGsm -> lte.servingPci?.let { "BSIC: $it" } ?: "BSIC: —"
+            isWcdma -> lte.secondarySignalDb?.let { "Ec/Io: ${String.format(Locale.US, "%.1f", it)} dB" } ?: "Ec/Io: — dB"
+            is5g -> (lte.csiRsrqDb ?: lte.rsrqDb)?.let { "SS-RSRQ: $it dB" } ?: "SS-RSRQ: — dB"
+            else -> lte.rsrqDb?.let { "RSRQ: $it dB [MEASURED]" } ?: "RSRQ: — dB"
         }
-        binding.tvSinr.setTextColor(ContextCompat.getColor(this, sinrColor))
 
-        binding.tvSinrValue.text = lte.sinrDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "— dB"
-        binding.tvSinrValue.setTextColor(ContextCompat.getColor(this, sinrColor))
-
-        when (lte.sinrSource) {
-            "MEASURED" -> {
-                binding.tvSinrSourceBadge.text = "[MEASURED]"
-                binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.rf_excellent))
-                binding.tvSinrIndicatorIcon.visibility = View.GONE
-                binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Modem physical baseband measurement"
-                binding.tvSinrModelDetails.text = "Direct modem hardware RSSNR register. Tap for measurement context."
-            }
-            "ESTIMATED" -> {
-                binding.tvSinrSourceBadge.text = "[ESTIMATED ⓘ]"
-                binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.rf_fair))
-                binding.tvSinrIndicatorIcon.visibility = View.VISIBLE
-                binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Calibrated radio model estimate"
-                val rssiStr = lte.impliedRssiDbm?.let { String.format(Locale.US, "%.1f dBm", it) } ?: "—"
-                binding.tvSinrModelDetails.text = "3GPP TS 36.214 Load Model (Implied RSSI: $rssiStr). Tap to inspect formula."
-            }
+        binding.tvRssi.text = when {
+            isGsm -> (lte.primarySignalDbm ?: lte.rssiDbm)?.let { "RxLev: $it dBm [MEASURED]" } ?: "RxLev: — dBm"
+            isWcdma -> lte.rssiDbm?.let { "RSSI: $it dBm [MEASURED]" } ?: "RSSI: — dBm"
+            is5g -> lte.rssiDbm?.let { "RSSI: $it dBm" } ?: "RSSI: — dBm"
             else -> {
-                binding.tvSinrSourceBadge.text = "[UNAVAILABLE]"
-                binding.tvSinrSourceBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                binding.tvSinrIndicatorIcon.visibility = View.GONE
-                binding.tvSinrQualitativeDiagnostic.text = lte.qualitativeDiagnostic ?: "Modem does not expose hardware SNR"
-                binding.tvSinrModelDetails.text = "Tap to inspect RF channel conditions and estimation requirements."
+                val modemRssi = lte.rssiDbm
+                val rsrp = lte.rsrpDbm
+                if (modemRssi != null && rsrp != null && modemRssi <= rsrp) {
+                    val implied = lte.impliedRssiDbm?.let { String.format(Locale.US, "%.0f", it) } ?: "—"
+                    "RSSI: $modemRssi dBm [HAL Sentinel < RSRP, Implied: $implied dBm]"
+                } else {
+                    modemRssi?.let { "RSSI: $it dBm [MEASURED]" }
+                        ?: lte.impliedRssiDbm?.let { String.format(Locale.US, "RSSI: %.1f dBm [Implied]", it) }
+                        ?: "RSSI: — dBm"
+                }
             }
         }
-        binding.tvRsrq.text = lte.rsrqDb?.let { "RSRQ: $it dB [MEASURED]" } ?: "RSRQ: — dB"
-        binding.tvRssi.text = lte.rssiDbm?.let { "RSSI: $it dBm [MEASURED]" } ?: "RSSI: — dBm"
-        binding.tvEarfcn.text = lte.earfcn?.let { "EARFCN: $it" } ?: "EARFCN: —"
-        binding.tvTac.text = lte.tac?.let { "TAC: $it" } ?: "TAC: —"
+
+        binding.tvEarfcn.text = when {
+            isGsm -> (lte.channelNumber ?: lte.earfcn)?.let { "ARFCN: $it" } ?: "ARFCN: —"
+            isWcdma -> (lte.channelNumber ?: lte.earfcn)?.let { "UARFCN: $it" } ?: "UARFCN: —"
+            is5g -> (lte.nrArfcn ?: lte.channelNumber)?.let { "NR-ARFCN: $it" } ?: "NR-ARFCN: —"
+            else -> (lte.channelNumber ?: lte.earfcn)?.let { "EARFCN: $it" } ?: "EARFCN: —"
+        }
+
+        val tacLabel = if (isGsm || isWcdma) "LAC" else "TAC"
+        binding.tvTac.text = lte.tac?.let { "$tacLabel: $it" } ?: "$tacLabel: —"
 
         // Update Operator & Network Identity Card
         binding.tvOperatorFreshnessBadge.text = opIdentity.getFreshnessText()
         binding.tvSimOperatorDetail.text = "SIM: ${opIdentity.simResolvedName} (MCC/MNC: ${opIdentity.simOperatorNumeric ?: "—"})"
         binding.tvNetworkOperatorDetail.text = "Registered Net: ${opIdentity.networkResolvedName} • ${opIdentity.roamingStatusText}"
-        val eciText = opIdentity.eci?.let { eci ->
-            val enb = opIdentity.derivedEnodebId
-            val sec = opIdentity.derivedSectorId
-            "ECGI: ${opIdentity.ecgi ?: eci} (eNodeB: $enb, Sec: $sec) • TAC: ${opIdentity.tac ?: "—"}"
-        } ?: "ECI: ${opIdentity.eci ?: "—"} • TAC: ${opIdentity.tac ?: "—"}"
+        val eciText = when {
+            isGsm -> {
+                val cgiStr = opIdentity.cgi?.let { "CGI: $it • " } ?: ""
+                "${cgiStr}CID: ${opIdentity.eci ?: "—"} • LAC: ${opIdentity.tac ?: "—"}"
+            }
+            isWcdma -> {
+                "UCGI / CID: ${opIdentity.eci ?: "—"} • LAC: ${opIdentity.tac ?: "—"}"
+            }
+            is5g -> {
+                "NCI: ${lte.nci ?: opIdentity.eci ?: "—"} • TAC: ${opIdentity.tac ?: "—"}"
+            }
+            else -> {
+                opIdentity.eci?.let { eci ->
+                    val enb = opIdentity.derivedEnodebId
+                    val sec = opIdentity.derivedSectorId
+                    "ECGI: ${opIdentity.ecgi ?: eci} (eNodeB: $enb, Sec: $sec) • TAC: ${opIdentity.tac ?: "—"}"
+                } ?: "ECI: ${opIdentity.eci ?: "—"} • TAC: ${opIdentity.tac ?: "—"}"
+            }
+        }
         binding.tvServingIdentityDetail.text = eciText
         binding.tvServingBandDetail.text = opIdentity.derivedBandText
     }
@@ -2548,8 +2740,18 @@ class MainActivity : AppCompatActivity() {
         } else {
             recorder.latestLte.value.allCells
         }
-        cellAdapter.updateCells(allCells)
-        binding.rfChannelGraphView.setCells(allCells)
+        val sortedCells = allCells.sortedWith(
+            compareBy<com.cellscope.drive.model.ObservedCell> {
+                when (it.servingStatus) {
+                    com.cellscope.drive.model.ServingStatus.PRIMARY_SERVING -> 0
+                    com.cellscope.drive.model.ServingStatus.SECONDARY_SERVING -> 1
+                    com.cellscope.drive.model.ServingStatus.SERVING_UNCONFIRMED -> 2
+                    com.cellscope.drive.model.ServingStatus.NEIGHBOR -> 3
+                }
+            }.thenByDescending { it.primarySignalDbm ?: it.rsrpDbm ?: it.rssiDbm ?: -999 }
+        )
+        cellAdapter.updateCells(sortedCells)
+        binding.rfChannelGraphView.setCells(sortedCells)
 
         val servingCount = allCells.count { it.isServing }
         val neighborCount = allCells.count { !it.isServing }

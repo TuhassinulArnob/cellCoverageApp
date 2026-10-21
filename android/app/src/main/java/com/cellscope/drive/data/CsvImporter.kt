@@ -2,6 +2,7 @@ package com.cellscope.drive.data
 
 import android.content.Context
 import android.net.Uri
+import com.cellscope.drive.analytics.RadioQualityEngine
 import com.cellscope.drive.data.db.CellScopeDatabase
 import com.cellscope.drive.data.entity.ActiveQoeTestEntity
 import com.cellscope.drive.data.entity.CallReliabilityEventEntity
@@ -1178,7 +1179,7 @@ object CsvImporter {
 
         val avgRsrp = if (rsrpCount > 0) rsrpSum.toDouble() / rsrpCount else null
         val importTimestampStr = TelecomTimeUtils.formatBdtPretty(System.currentTimeMillis())
-        val flaggedClampCount = parsedTelemetry.count { it.rsrpDbm == -44 }
+        val flaggedClampCount = parsedTelemetry.count { RadioQualityEngine.isSuspectBasebandClamp(it.rsrpDbm, it.rsrqDb, it.rssiDbm, it.networkType, it.servingRat) }
 
         val session = DriveSession(
             sessionName = sessionName,

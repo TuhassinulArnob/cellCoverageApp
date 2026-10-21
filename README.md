@@ -34,7 +34,7 @@ The CellScope-5G repository features complete, production-grade technical docume
 
 ## Latest Android APK — v3.0 Production
 
-📦 **Download Latest Release:** [`CellScope-v3.0.apk`](CellScope-v3.0.apk) (~50.01 MB / `52,443,514 bytes`, verified build)
+📦 **Download Latest Release:** [`CellScope-v3.0.apk`](CellScope-v3.0.apk) (~50.01 MB / `52,316,574 bytes`, verified build)
 
 * **Version:** `v3.0.0-production` (Build 2026.10, API 26–35)
 * **Build Variant:** Debug (`assembleDebug`) — signed with the standard Android debug keystore for seamless installation on test devices and developer handsets without requiring custom release key provisioning.
@@ -93,6 +93,14 @@ The CellScope-5G repository features complete, production-grade technical docume
 * **Application-Wide Dual Theme:** Polished theme toggle supporting dark mode and high-contrast telecom light mode (`#F5F7FB` background, crisp white cards, `#0F172A` text).
 * **Zero-Flash Client Persistence:** Pre-render inline anti-flash script in `index.html` backed by `localStorage` (`'cellscope-theme'`).
 * **Map & Layer Synchronization:** Dynamic Leaflet raster tile filter toggle (`cellscope-dark-tiles` inverted tiles vs. `cellscope-light-tiles` clean OpenStreetMap basemap).
+
+### 8. Radio Propagation & Mobility Analytics Suite (Web Dashboard)
+* **Dedicated Analytical Navigation Tab:** Integrated `Radio Propagation & Mobility` module featuring four specialized physical layer and mobility sub-modules:
+  * **Shadowing Analysis:** Evaluates macroscopic slow fading over distance via spatial moving averages, empirical linear path loss, residual standard deviation ($\sigma_\psi$), and candidate localized obstruction corridors on an interactive Leaflet map.
+  * **Signal Fluctuation Analysis:** Tracks sample-to-sample deltas ($\Delta\text{dB}$), rolling standard deviation ($\sigma$), empirical signal distributions, and includes an active **sampling rate validation audit** disclosing the physical boundary between ~1 Hz macroscopic sampling and sub-wavelength fast fading.
+  * **Multipath Propagation Analysis:** Computes spatial rate of change ($|\Delta\text{RSRP}| / \Delta d$ in dB/meter), highlights high spatial gradients, and detects repeated location clusters ($\le 20\text{m}$ radius across time) to evaluate scattering repeatability.
+  * **Ping-Pong Handover Oscillation Analysis:** Detects $A \rightarrow B \rightarrow A$ mobility loops across configurable time windows ($\le 5\text{s}, 10\text{s}, 15\text{s}, 30\text{s}, 60\text{s}$), calculates intermediate cell dwell times, and strictly differentiates confirmed network handovers from periodic snapshot oscillations.
+* **4-Subheading Scientific Explanations:** Every primary chart features dynamic explanations answering: *What the graph shows*, *Telecom interpretation*, *Why it matters*, and *Limitations and confidence*.
 
 ---
 
@@ -190,7 +198,7 @@ flowchart TD
 All verification test suites have been executed and verified in place:
 
 * **Android Unit Tests:** **272 / 272 Passed** (100% success rate across 52 test suites via `.\android\gradlew.bat testDebugUnitTest` in 19s, 0 failures, Exit Code 0).
-* **Android Debug APK Assembly:** **BUILD SUCCESSFUL** via `assembleDebug` (`app-debug.apk` ~50.01 MB / `52,443,514 bytes`, Exit Code 0).
+* **Android Debug APK Assembly:** **BUILD SUCCESSFUL** via `assembleDebug` (`app-debug.apk` ~50.01 MB / `52,316,574 bytes`, Exit Code 0).
 * **FastAPI Backend Analytics:** **43 / 43 Passed** (`python -m pytest backend/tests`, 0 failures, Exit Code 0).
 * **Frontend Production Build:** **BUILD SUCCESSFUL** (`cmd /c "npm --prefix frontend run build"`, 1,937 modules transformed in 771ms, 0 errors, Exit Code 0).
 * **Frontend Static Code Quality:** **0 Warnings, 0 Errors** (`npm run lint` via oxlint across 20 files, Exit Code 0).

@@ -58,21 +58,59 @@ Under 3GPP TS 36.214, Reference Signal Received Quality ($\text{RSRQ}$) is defin
 $$\text{RSRQ} = \frac{N \cdot \text{RSRP}}{\text{RSSI}}$$
 where $N$ is the integer number of downlink Resource Blocks (RBs) spanning the carrier bandwidth ($N \in \{6, 15, 25, 50, 75, 100\}$).
 
-The wideband carrier RSSI linear power is composed of serving cell reference symbols, serving cell data traffic subcarriers, co-channel neighbor cell interference ($I_{\text{ext}}$), and thermal background noise ($N_0$):
-$$\text{RSSI}_{\text{linear}} = 12 \cdot N \cdot \text{RSRP}_{\text{linear}} + \eta \cdot 12 \cdot N \cdot P_{\text{traffic}} + I_{\text{ext}} + N_0$$
-where $\eta \in [0.0, 1.0]$ represents the fractional cell traffic load (assumed nominal $\eta = 0.5$ for 50% loaded operational networks).
+By definition, carrier $\text{RSSI}$ is measured across OFDM symbol 0 carrying Cell-Specific Reference Signals (CRS). In each Resource Block (12 subcarriers):
+- 2 Resource Elements carry CRS with power $P_{\text{CRS}} = \text{RSRP}$.
+- 10 Resource Elements carry PDSCH user data with fractional traffic load $\eta \in [0.0, 1.0]$. Assuming equal power spectral density allocation ($P_{\text{data}} \approx \text{RSRP}$), the serving signal power per PRB is $(2 + 10\eta)\cdot \text{RSRP}$.
+- All 12 Resource Elements carry thermal noise and external co-channel interference $I_{\text{ext}} + N_0$.
 
-Carrier-to-Interference-plus-Noise Ratio ($\text{SINR}$) on the Reference Signals is:
-$$\text{SINR}_{\text{linear}} = \frac{\text{RSRP}_{\text{linear}}}{I_{\text{ext}} + N_0}$$
+The total carrier power per PRB ($P_{\text{RB}} = \text{RSSI} / N$) is:
+$$P_{\text{RB}} = \frac{\text{RSSI}}{N} = (2 + 10\eta)\cdot\text{RSRP}_{\text{linear}} + 12 \cdot (I_{\text{ext}} + N_0)$$
 
-Dividing by $N \cdot \text{RSRP}_{\text{linear}}$ and rearranging yields the 3GPP load model:
-$$\frac{1}{\text{RSRQ}_{\text{linear}}} = 12 + 12\eta\frac{P_{\text{traffic}}}{\text{RSRP}} + \frac{1}{\text{SINR}_{\text{linear}}}$$
+Dividing both sides by $\text{RSRP}_{\text{linear}}$:
+$$\frac{1}{\text{RSRQ}_{\text{linear}}} = \frac{\text{RSSI}}{N \cdot \text{RSRP}_{\text{linear}}} = (2 + 10\eta) + \frac{12 \cdot (I_{\text{ext}} + N_0)}{\text{RSRP}_{\text{linear}}}$$
 
-Assuming equal power allocation between data and reference symbols ($P_{\text{traffic}} \approx \text{RSRP}$), we define the load offset factor:
-$$\text{offset} = 2.0 + 10.0 \cdot \eta \quad (\text{offset} = 7.0 \text{ for } \eta = 0.5)$$
-$$\text{denom} = \left(\frac{1}{\text{RSRQ}_{\text{linear}}}\right) - \text{offset}$$
-$$\text{SINR}_{\text{dB}} = 10 \log_{10}\left(\frac{12.0}{\max(\text{denom}, 0.001)}\right)$$
-Clamped bounds: $[-20.0\text{ dB}, +30.0\text{ dB}]$.
+Since reference signal $\text{SINR}_{\text{linear}} = \frac{\text{RSRP}_{\text{linear}}}{I_{\text{ext}} + N_0}$:
+$$\frac{1}{\text{RSRQ}_{\text{linear}}} = (2 + 10\eta) + \frac{12}{\text{SINR}_{\text{linear}}}$$
+$$\frac{12}{\text{SINR}_{\text{linear}}} = \frac{1}{\text{RSRQ}_{\text{linear}}} - (2 + 10\eta)$$
+$$\text{SINR}_{\text{linear}} = \frac{12}{\frac{1}{\text{RSRQ}_{\text{linear}}} - (2 + 10\eta)}$$
+
+#### Bandwidth Independence in SINR Estimation
+Notice that channel bandwidth $N$ cancels out identically in the SINR formulation ($RSRQ = RSRP / P_{\text{RB}}$). The number of resource blocks $N$ only scales wideband carrier RSSI ($\text{RSSI}_{\text{dBm}} = \text{RSRP}_{\text{dBm}} + 10\log_{10}(N) - \text{RSRQ}_{\text{dB}}$). Unknown or unexposed channel bandwidth introduces **zero mathematical error** into the estimated SINR value itself.
+
+#### The Three Operational Regimes
+
+1. **Regime 1: Nominal Loaded Regime ($\text{RSRQ} \le -8.45\text{ dB}$, $\frac{1}{\text{RSRQ}} \ge 7.0$)**
+   - The cell traffic load can accommodate the nominal assumption $\eta = 0.5$ (50% traffic load).
+   - Offset: $\text{offset} = 2.0 + 10.0(0.5) = 7.0$.
+   - $\text{denom} = \frac{1}{\text{RSRQ}_{\text{linear}}} - 7.0 > 0$.
+   - $\text{SINR}_{\text{dB}} = 10 \log_{10}\left(\frac{12.0}{\text{denom}}\right)$.
+   - Examples:
+     - $\text{RSRQ} = -11.0\text{ dB} \implies \text{SINR} = 3.3\text{ dB}$ (Confidence: `CALIBRATED_ESTIMATE`).
+     - $\text{RSRQ} = -10.0\text{ dB} \implies \text{SINR} = 6.0\text{ dB}$ (Confidence: `CALIBRATED_ESTIMATE`).
+
+2. **Regime 2: Bounded Light-Load Regime ($-8.45\text{ dB} < \text{RSRQ} < -3.01\text{ dB}$)**
+   - When $\text{RSRQ} > -8.45\text{ dB}$, $\frac{1}{\text{RSRQ}} < 7.0$. A 50% traffic load ($\eta = 0.5$) is physically impossible because even with zero noise and zero interference ($I_{\text{ext}} + N_0 = 0$), maximum achievable RSRQ at 50% load is $1/7 = -8.45\text{ dB}$.
+   - The instantaneous cell traffic load is physically bounded by the observed RSRQ:
+     $$\eta \in [0.0, \eta_{\text{max}}], \quad \text{where } \eta_{\text{max}} = \frac{1/\text{RSRQ}_{\text{linear}} - 2.0}{10.0}$$
+   - Under the principle of maximum entropy (uniform prior $\eta \sim U[0, \eta_{\text{max}}]$ for unmeasured eNodeB MAC scheduler load), the expected load is $\bar{\eta} = \frac{\eta_{\text{max}}}{2}$.
+   - Substituting $\bar{\eta}$ into the denominator:
+     $$\text{offset} = 2.0 + 10.0\bar{\eta} = 1.0 + \frac{1}{2 \cdot \text{RSRQ}_{\text{linear}}}$$
+     $$\text{denom} = \frac{1}{\text{RSRQ}_{\text{linear}}} - \text{offset} = \frac{1 - 2\cdot\text{RSRQ}_{\text{linear}}}{2 \cdot \text{RSRQ}_{\text{linear}}}$$
+     $$\text{SINR}_{\text{linear}} = \frac{24 \cdot \text{RSRQ}_{\text{linear}}}{1 - 2\cdot\text{RSRQ}_{\text{linear}}}$$
+   - Physical bounds:
+     - Minimum possible SINR occurs if cell is completely idle ($\eta = 0 \implies \text{offset} = 2.0 \implies \text{SINR}_{\text{min}} = \frac{12}{1/\text{RSRQ} - 2}$).
+     - Maximum possible SINR occurs as $\eta \to \eta_{\text{max}}$ (noise-free limit, bounded by UE dynamic range at $+30.0\text{ dB}$).
+   - Examples:
+     - $\text{RSRQ} = -8.0\text{ dB} \implies \eta_{\text{max}} = 43.1\%, \bar{\eta} = 21.5\% \implies \mathbf{\text{SINR} = 7.5\text{ dB}}$ (Physical bounds: $[4.4\text{ dB}, 30.0\text{ dB}]$).
+     - $\text{RSRQ} = -7.0\text{ dB} \implies \eta_{\text{max}} = 30.1\%, \bar{\eta} = 15.1\% \implies \mathbf{\text{SINR} = 9.0\text{ dB}}$ (Physical bounds: $[6.0\text{ dB}, 30.0\text{ dB}]$).
+   - Method label: `3GPP_TS_36_214_BOUNDED_LOAD_MODEL`.
+   - Confidence: `BOUNDED_LOAD_ESTIMATE`.
+
+3. **Regime 3: Asymptotic Saturation Ceiling ($\text{RSRQ} \ge -3.01\text{ dB}$, e.g. $-3.0\text{ dB}$)**
+   - In 3GPP TS 36.133 Table 9.1.7-1, RSRQ is reported up to Index 34 ($\text{RSRQ} \ge -3.0\text{ dB}$).
+   - At $\text{RSRQ} = -3.0\text{ dB}$, $\frac{1}{\text{RSRQ}} \approx 1.995 \le 2.0$. Even at $\eta = 0$, $2\cdot\text{RSRP}$ accounts for the entire carrier power.
+   - At this ceiling, external interference and noise fall below receiver detection resolution. Multiple physical SINR values ($>25\text{ dB}$) map to this single saturated value.
+   - Mathematical inversion is indeterminate. The system returns `sinrDb = null`, `source = "UNAVAILABLE"`, and provides an explicit qualitative engineering diagnostic ("Clean RF channel conditions indicated by strong RSRQ (-3 dB); model-based SINR estimation unavailable at 3GPP saturation ceiling"). Never fabricates $30.0\text{ dB}$.
 
 The implied total carrier $\text{RSSI}$ in physical $\text{dBm}$ is calculated as:
 $$\text{RSSI}_{\text{dBm}} = \text{RSRP}_{\text{dBm}} + 10\log_{10}(N) - \text{RSRQ}_{\text{dB}}$$
@@ -80,14 +118,15 @@ $$\text{RSSI}_{\text{dBm}} = \text{RSRP}_{\text{dBm}} + 10\log_{10}(N) - \text{R
 ### 1.3 Provenance Hierarchy & Sentinel Rejection
 1. **`MEASURED`:**
    - Valid modem reading from `CellSignalStrengthLte.rssnr` (or 5G `CellSignalStrengthNr.ssSinr`).
+   - Secondary check: In Android 10+ (API 29+), inspects `TelephonyManager.signalStrength.getCellSignalStrengths(CellSignalStrengthLte::class.java)` if `allCellInfo` leaves `rssnr` unpopulated.
    - Android sentinels (`99`, `0x7FFFFFFF`, `-1`) are strictly rejected.
    - **Zero Sentinel Protection:** Android RILs frequently return raw `0` when SINR is uninitialized or unsupported. Raw `0` is **rejected** as measured unless the session has already observed genuine non-zero readings (`hasSeenNonZeroRssnr == true`).
 2. **`ESTIMATED`:**
-   - Evaluated strictly for 4G LTE when inputs satisfy standard 3GPP validity boundaries: $-140.0\text{ dBm} \le \text{RSRP} \le -40.0\text{ dBm}$ and $-25.0\text{ dB} \le \text{RSRQ} \le -3.0\text{ dB}$.
-   - Method label: `3GPP_TS_36_214_RSRQ_LOAD_MODEL`.
-   - Confidence: `CALIBRATED_ESTIMATE` with documented uncertainty ($\pm 3.5\text{ dB}$).
+   - Evaluated strictly for 4G LTE when inputs satisfy standard 3GPP validity boundaries: $-140.0\text{ dBm} \le \text{RSRP} \le -40.0\text{ dBm}$ and $-25.0\text{ dB} \le \text{RSRQ} < -3.01\text{ dB}$.
+   - Method label: `3GPP_TS_36_214_RSRQ_LOAD_MODEL` ($\text{RSRQ} \le -8.45\text{ dB}$) or `3GPP_TS_36_214_BOUNDED_LOAD_MODEL` ($-8.45\text{ dB} < \text{RSRQ} < -3.01\text{ dB}$).
+   - Confidence: `CALIBRATED_ESTIMATE` or `BOUNDED_LOAD_ESTIMATE` with documented uncertainty and load bounds.
 3. **`UNAVAILABLE`:**
-   - Returned when inputs are missing, out of physical bounds, or when evaluating 5G NR (3GPP TS 38.215 NR SS-RSRQ definitions do not map to LTE carrier RSSI equations). Never defaults to `0.0`.
+   - Returned when inputs are missing, out of physical bounds, at the 3GPP index-34 saturation ceiling, or when evaluating 5G NR (3GPP TS 38.215 NR SS-RSRQ definitions do not map to LTE carrier RSSI equations). Never defaults to `0.0`.
 
 ---
 
@@ -288,3 +327,70 @@ $$\text{If } \Delta\text{RSRP} \ge +6.0\text{ dB for } t \ge 5.0\text{ s} \impli
 ### 11.2 Segment Criteria
 * **Weak Coverage Zone:** Sequence of $\ge 3$ consecutive telemetry samples where $\text{RSRP} < -105.0\text{ dBm}$.
 * **Critical Service Hole:** Sequence where $\text{RSRP} < -115.0\text{ dBm}$ or physical modem radio state reports `OUT_OF_SERVICE`.
+
+---
+
+## 12. Web-Based Radio Propagation & Mobility Analytics Engine
+
+### 12.1 Log-Normal Shadowing & Empirical Baseline Model (`analyzeShadowing`)
+* **Classification:** Spatial Moving Average & Empirical Regression Residual Estimator (*Not Machine Learning*).
+* **Source Entry Points:**
+  * Frontend: `frontend/src/utils/propagationAnalytics.ts` (`analyzeShadowing()`)
+  * Frontend UI: `frontend/src/components/RadioPropagationPanel.tsx` (Sub-tab: `Shadowing Analysis`)
+* **Mathematical Formulation:**
+  1. **Geodesic Distance:** Consecutive Haversine distance along vehicle route:
+     $$d_k = d_{k-1} + \mathcal{H}(\phi_{k-1}, \lambda_{k-1}, \phi_k, \lambda_k)$$
+  2. **Spatial Moving Average Window ($W$):**
+     $$\overline{\text{RSRP}}(d_k) = \frac{1}{2M + 1} \sum_{j=-M}^{M} \text{RSRP}(d_{k+j}) \quad (W = 2M + 1 \in \{5, 10, 20\})$$
+  3. **Empirical Baseline Path-Loss Regression:**
+     $$\text{RSRP}_{\text{trend}}(d) = \beta_0 + \beta_1 d$$
+     where $\beta_1 = \frac{n \sum d_i R_i - \sum d_i \sum R_i}{n \sum d_i^2 - (\sum d_i)^2}$, $\beta_0 = \frac{\sum R_i - \beta_1 \sum d_i}{n}$.
+  4. **Residual Variation:**
+     $$\text{Residual}_i = \text{RSRP}_i - \overline{\text{RSRP}}_i$$
+  5. **Log-Normal Shadowing Spread ($\sigma_\psi$):**
+     $$\sigma_\psi = \sqrt{\frac{1}{n-1} \sum_{i=1}^n (\text{Residual}_i - \mu_{\text{res}})^2}$$
+  6. **Candidate Shadowing Zones:** Contiguous runs of $\ge 3$ consecutive samples where $\text{Residual}_i \le -6.0\text{ dB}$, isolating localized structural blockage from broad distance decay.
+* **Scientific Disclosures:** Exact eNodeB antenna coordinates and transmit EIRP are not broadcast over commercial LTE air interfaces; empirical regression is utilized rather than claiming unverified free-space path loss.
+
+### 12.2 Macroscopic Signal Fluctuation & Sampling Rate Audit (`analyzeSignalFluctuation`)
+* **Classification:** Statistical Fluctuation & Telemetry Periodicity Validator (*Not Machine Learning*).
+* **Source Entry Points:**
+  * Frontend: `frontend/src/utils/propagationAnalytics.ts` (`analyzeSignalFluctuation()`)
+  * Frontend UI: `frontend/src/components/RadioPropagationPanel.tsx` (Sub-tab: `Signal Fluctuation`)
+* **Mathematical Formulation:**
+  1. **Consecutive Signal Delta:**
+     $$\Delta\text{RSRP}_k = \text{RSRP}_k - \text{RSRP}_{k-1} \quad (\text{dB})$$
+  2. **Rolling Standard Deviation ($\sigma_k$ over window $W=10$):**
+     $$\mu_k = \frac{1}{W} \sum_{j=0}^{W-1} \text{RSRP}_{k-j}, \quad \sigma_k = \sqrt{\frac{1}{W-1}\sum_{j=0}^{W-1} (\text{RSRP}_{k-j} - \mu_k)^2}$$
+  3. **Telemetry Periodicity:** $\Delta t_k = t_k - t_{k-1}$ (in seconds).
+* **Sampling Rate Validation Disclosure:** Standard Android TelephonyManager polling (~1 Hz / $\Delta t \approx 1.0\text{ s}$) corresponds to $\approx 8 - 15\text{ m}$ of vehicle travel per fix. Because RF carrier wavelength at 1.8 GHz is $\lambda = c / f = 0.166\text{ m}$ (16.6 cm), a 1-second sample spans $50 - 100\lambda$, aliasing microscopic constructive/destructive Rayleigh fading nulls. The engine strictly characterizes **macroscopic signal fluctuations**, not fast fading.
+
+### 12.3 Exploratory Multipath Spatial Rate of Change & Revisit Clusters (`analyzeMultipathPropagation`)
+* **Classification:** Spatial Gradient & Revisit Distance Cluster Estimator (*Not Machine Learning*).
+* **Source Entry Points:**
+  * Frontend: `frontend/src/utils/propagationAnalytics.ts` (`analyzeMultipathPropagation()`)
+  * Frontend UI: `frontend/src/components/RadioPropagationPanel.tsx` (Sub-tab: `Multipath Propagation`)
+* **Mathematical Formulation:**
+  1. **Spatial Gradient:**
+     $$\nabla_s = \frac{|\text{RSRP}_k - \text{RSRP}_{k-1}|}{\Delta d_k} \quad (\text{dB/meter for } \Delta d_k \ge 1.5\text{ m})$$
+     High spatial variation flagged when $\nabla_s \ge 0.4\text{ dB/m}$ within the same serving cell.
+  2. **Revisited Location Clustering:** Identifies pairs of fixes $(i, j)$ separated by $\Delta t \ge 15\text{ s}$ but located within geographic radius $R \le 20\text{ m}$:
+     $$\mathcal{H}(\phi_i, \lambda_i, \phi_j, \lambda_j) \le 20\text{ m} \implies \Delta\text{RSRP}_{\text{revisit}} = |\text{RSRP}_j - \text{RSRP}_i|$$
+* **Scientific Disclosures:** Commercial UE basebands do not output Channel Impulse Responses (CIR), Power Delay Profiles (PDP), or Angle of Arrival (AoA). Analysis is explicitly designated as exploratory macroscopic spatial variation.
+
+### 12.4 Ping-Pong Handover Oscillation Detection (`analyzePingPongHandover`)
+* **Classification:** 3GPP TS 36.331 Event A3 Mobility Loop State Machine (*Not Machine Learning*).
+* **Source Entry Points:**
+  * Frontend: `frontend/src/utils/propagationAnalytics.ts` (`analyzePingPongHandover()`)
+  * Frontend UI: `frontend/src/components/RadioPropagationPanel.tsx` (Sub-tab: `Ping-Pong Handover`)
+* **Mathematical Formulation:**
+  1. **Chronological Segment Decomposition:** Partition drive sequence into contiguous serving cell runs $S_1, S_2, \dots, S_m$, where each segment $S_k$ has cell ID $C_k$, duration $T_k$, start time $t_{s, k}$, and end time $t_{e, k}$.
+  2. **Ping-Pong Loop Pattern:** Detects sequences $S_k \rightarrow S_{k+1} \rightarrow S_{k+2}$ where:
+     $$C_k = C_{k+2} \quad \text{and} \quad C_{k+1} \neq C_k$$
+     $$\text{Total Loop Elapsed Time: } \Delta t_{\text{loop}} = t_{s, k+2} - t_{s, k+1} \le T_{\text{window}} \quad (T_{\text{window}} \in \{5, 10, 15, 30, 60\}\text{ s})$$
+  3. **Intermediate Dwell Time:** $\Delta t_{\text{dwell}} = T_{k+1}$.
+  4. **Classification:**
+     - `CONFIRMED_PING_PONG`: Constituent transition is accompanied by an explicit network handover trigger (`is_handover_trigger: true` or `event_type: 'CONFIRMED_HANDOVER'`).
+     - `INFERRED_PING_PONG_OSCILLATION`: Pattern observed from periodic serving cell snapshots without explicit RRC handover confirmation.
+  5. **Cell-Pair Transition Frequency Matrix:** Aggregates forward ($C_A \rightarrow C_B$) and reverse ($C_B \rightarrow C_A$) switches for all cell pairs.
+

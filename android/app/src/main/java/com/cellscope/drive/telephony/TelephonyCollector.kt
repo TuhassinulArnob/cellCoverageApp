@@ -133,7 +133,9 @@ class TelephonyCollector(
                 try { android.telephony.SubscriptionManager.getDefaultDataSubscriptionId() } catch (_: Exception) { null }
             } else null,
             isStale = isStale,
-            activeRat = serving.servingRat ?: serving.networkGen?.code ?: "LTE"
+            activeRat = serving.servingRat ?: serving.networkGen?.code ?: "LTE",
+            channelNumber = serving.channelNumber ?: serving.earfcn,
+            channelType = serving.channelType
         )
     }
 
@@ -233,9 +235,30 @@ class TelephonyCollector(
                 }
             }
 
-            // Authoritatively classify serving status across all scanned cells, prioritizing active data SIM's registered PLMN
+            // Determine authoritative preferred RAT from data connection / voice bearer
+            val activeRat = when {
+                netType == "5G_NR" -> "5G"
+                netType == "LTE" -> "4G"
+                netType == "3G_WCDMA" -> "3G"
+                netType == "2G_GSM" -> "2G"
+                else -> {
+                    val gen = NetworkGeneration.fromNetworkType(dataNetInt)
+                    if (gen.isCellularService) {
+                        gen.code
+                    } else {
+                        val voiceGen = NetworkGeneration.fromNetworkType(voiceNetInt)
+                        if (voiceGen.isCellularService) voiceGen.code else null
+                    }
+                }
+            }
+
+            // Authoritatively classify serving status across all scanned cells, prioritizing active data SIM's registered PLMN and active RAT
             val preferredPlmn = operatorNumeric?.trim()?.replace("-", "")
-            val observedCells = ServingCellClassifier.classify(rawCandidates, preferredPlmn = preferredPlmn)
+            val observedCells = ServingCellClassifier.classify(
+                candidates = rawCandidates,
+                preferredPlmn = preferredPlmn,
+                preferredRat = activeRat
+            )
 
             // Primary serving cell is the single authoritative PCell
             val primaryServingCell = observedCells.firstOrNull { it.servingStatus == ServingStatus.PRIMARY_SERVING }
@@ -396,6 +419,15 @@ class TelephonyCollector(
             RawCellCandidate.CONNECTION_UNKNOWN
         }
 
+        val nowBootMs = android.os.SystemClock.elapsedRealtime()
+        val cellAgeMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && info.timestampMillis > 0L) {
+            (nowBootMs - info.timestampMillis).coerceAtLeast(0L)
+        } else if (info.timeStamp > 0L) {
+            ((android.os.SystemClock.elapsedRealtimeNanos() - info.timeStamp) / 1_000_000L).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+
         when {
             info is CellInfoLte -> {
                 val identity = info.cellIdentity
@@ -410,14 +442,35 @@ class TelephonyCollector(
                 } else null
 
                 val bandwidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    identity.bandwidth.takeIf { it > 0 }
+                    val rawBw = identity.bandwidth
+                    val normalized = when (rawBw) {
+                        1 -> 1400 // 1.4 MHz (vendor HAL integer MHz)
+                        3 -> 3000
+                        5 -> 5000
+                        10 -> 10000
+                        15 -> 15000
+                        20 -> 20000
+                        else -> rawBw
+                    }
+                    normalized.takeIf {
+                        it != Integer.MAX_VALUE &&
+                            !SinrDiagnostics.UNAVAILABLE_SENTINELS.contains(it) &&
+                            it in 1400..100000
+                    }
                 } else null
 
                 val rsrp = signal.rsrp.takeIf { it in -140..-44 }
                 val rsrq = signal.rsrq.takeIf { it in -30..-3 }
-                val rssi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val rawRssi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     signal.rssi.takeIf { it in -120..-40 }
                 } else null
+
+                // Physical Sanity Check for LTE Carrier RSSI:
+                // 1) Wideband carrier RSSI must physically exceed narrowband RSRP (sum over >= 72 subcarriers).
+                // 2) -113 dBm is the standard 3GPP TS 27.007 CSQ ASU 0 sentinel for uninitialized/unmeasured registers.
+                val rssi = rawRssi?.takeIf { r ->
+                    (rsrp == null || r > rsrp) && !(r == -113 && (rsrp ?: -140) > -105)
+                }
 
                 // Extract cell-specific PLMN and operator identity
                 val cellMcc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -443,9 +496,21 @@ class TelephonyCollector(
                     simOperatorName = operatorName
                 )
 
-                val rawRssnr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                var rawRssnr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     signal.rssnr.takeIf { !SinrDiagnostics.UNAVAILABLE_SENTINELS.contains(it) }
                 } else null
+
+                // Secondary check: If rawRssnr from CellInfo is missing or uninitialized 0, inspect TelephonyManager.signalStrength on API 29+
+                if ((rawRssnr == null || rawRssnr == 0) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && info.isRegistered) {
+                    try {
+                        val tm = getActiveTelephonyManager() ?: telephonyManager
+                        val tmSignalStrengths = tm?.signalStrength?.getCellSignalStrengths(CellSignalStrengthLte::class.java)
+                        val tmRssnr = tmSignalStrengths?.firstOrNull()?.rssnr?.takeIf { !SinrDiagnostics.UNAVAILABLE_SENTINELS.contains(it) }
+                        if (tmRssnr != null && tmRssnr != 0) {
+                            rawRssnr = tmRssnr
+                        }
+                    } catch (_: Exception) {}
+                }
 
                 if (rawRssnr != null && rawRssnr != 0) {
                     hasSeenNonZeroRssnr = true
@@ -493,7 +558,8 @@ class TelephonyCollector(
                     estimationAssumptions = sinrProv.estimationAssumptions,
                     sinrConfidence = sinrProv.confidence,
                     qualitativeDiagnostic = sinrProv.qualitativeDiagnostic,
-                    impliedRssiDbm = sinrProv.impliedRssiDbm
+                    impliedRssiDbm = sinrProv.impliedRssiDbm,
+                    ageMs = cellAgeMs
                 )
             }
 
@@ -561,7 +627,8 @@ class TelephonyCollector(
                     estimationAssumptions = nrSinrProv.estimationAssumptions,
                     sinrConfidence = nrSinrProv.confidence,
                     qualitativeDiagnostic = nrSinrProv.qualitativeDiagnostic,
-                    impliedRssiDbm = null
+                    impliedRssiDbm = null,
+                    ageMs = cellAgeMs
                 )
             }
 
@@ -617,7 +684,8 @@ class TelephonyCollector(
                     channelType = "UARFCN",
                     primarySignalDbm = rscp,
                     signalMetricType = "WCDMA_RSCP",
-                    secondarySignalDb = null
+                    secondarySignalDb = null,
+                    ageMs = cellAgeMs
                 )
             }
 
@@ -675,7 +743,8 @@ class TelephonyCollector(
                     channelType = "ARFCN",
                     primarySignalDbm = dbm,
                     signalMetricType = "GSM_RSSI",
-                    secondarySignalDb = null
+                    secondarySignalDb = null,
+                    ageMs = cellAgeMs
                 )
             }
 
@@ -741,15 +810,20 @@ class TelephonyCollector(
 
     @SuppressLint("MissingPermission")
     private fun getNetworkTypeString(): String {
+        val tm = getActiveTelephonyManager() ?: telephonyManager
         return try {
-            when (telephonyManager?.dataNetworkType) {
-                TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
+            when (tm?.dataNetworkType) {
+                TelephonyManager.NETWORK_TYPE_LTE, 19 -> "LTE"
                 TelephonyManager.NETWORK_TYPE_NR -> "5G_NR"
                 TelephonyManager.NETWORK_TYPE_HSPAP,
                 TelephonyManager.NETWORK_TYPE_HSPA,
-                TelephonyManager.NETWORK_TYPE_UMTS -> "3G_WCDMA"
+                TelephonyManager.NETWORK_TYPE_HSDPA,
+                TelephonyManager.NETWORK_TYPE_HSUPA,
+                TelephonyManager.NETWORK_TYPE_UMTS,
+                14, 17 -> "3G_WCDMA"
                 TelephonyManager.NETWORK_TYPE_EDGE,
-                TelephonyManager.NETWORK_TYPE_GPRS -> "2G_GSM"
+                TelephonyManager.NETWORK_TYPE_GPRS,
+                16 -> "2G_GSM"
                 else -> "UNKNOWN"
             }
         } catch (e: Exception) {

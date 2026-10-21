@@ -261,4 +261,110 @@ class ServingCellClassificationTest {
         // Neighbor remains NEIGHBOR
         assertEquals(ServingStatus.NEIGHBOR, neighbor?.servingStatus)
     }
+
+    @Test
+    fun testRatTransition_GsmServingPreferredOverStaleLteNeighbor() {
+        // Field reproduction: Phone dropped to 2G GSM.
+        // Modem reports registered GSM cell (BSIC 32, ARFCN 1021, RxLev -51 dBm, LAC 18452, CID 4567).
+        // RIL still contains a lingering/stale LTE cell (PCI 43, EARFCN 1399, RSRP -106 dBm, isRegistered = true).
+        val candidates = listOf(
+            RawCellCandidate(
+                pci = 43,
+                tac = 18452,
+                eci = 2849102,
+                earfcn = 1399,
+                rsrpDbm = -106,
+                isRegistered = true,
+                servingRat = "4G",
+                networkType = "LTE",
+                ageMs = 18000L // 18s old
+            ),
+            RawCellCandidate(
+                pci = 32,
+                tac = 18452,
+                eci = 4567,
+                earfcn = null,
+                channelNumber = 1021,
+                channelType = "ARFCN",
+                primarySignalDbm = -51,
+                rssiDbm = -51,
+                rsrpDbm = null, // Strictly null on GSM!
+                isRegistered = true,
+                servingRat = "2G",
+                networkType = "2G_GSM",
+                ageMs = 150L // 150ms fresh
+            ),
+            RawCellCandidate(
+                pci = 88,
+                earfcn = 1399,
+                rsrpDbm = -112,
+                isRegistered = false,
+                servingRat = "4G",
+                networkType = "LTE"
+            )
+        )
+
+        val classified = ServingCellClassifier.classify(candidates, preferredRat = "2G")
+
+        val gsmCell = classified.find { it.pci == 32 && it.servingRat == "2G" }
+        val lteCell = classified.find { it.pci == 43 }
+        val neighborLte = classified.find { it.pci == 88 }
+
+        assertNotNull(gsmCell)
+        assertNotNull(lteCell)
+        assertNotNull(neighborLte)
+
+        // The GSM cell MUST be PRIMARY_SERVING because active RAT is 2G
+        assertEquals(ServingStatus.PRIMARY_SERVING, gsmCell?.servingStatus)
+        assertTrue(gsmCell?.isServing == true)
+
+        // The lingering LTE cell MUST NOT override the active GSM PCell; it becomes SERVING_UNCONFIRMED
+        assertEquals(ServingStatus.SERVING_UNCONFIRMED, lteCell?.servingStatus)
+        assertFalse(lteCell?.isServing == true)
+
+        // Neighbor LTE remains neighbor
+        assertEquals(ServingStatus.NEIGHBOR, neighborLte?.servingStatus)
+
+        // Exactly one primary serving cell
+        assertEquals(1, classified.count { it.servingStatus == ServingStatus.PRIMARY_SERVING })
+    }
+
+    @Test
+    fun testGsmServing_SignalComparisonUsesPrimarySignalDbm() {
+        // Verify that GSM candidate with null rsrpDbm but strong primarySignalDbm (-51 dBm)
+        // is properly evaluated and not treated as -999 dBm
+        val candidates = listOf(
+            RawCellCandidate(
+                pci = 32,
+                tac = 18452,
+                eci = 4567,
+                channelNumber = 1021,
+                primarySignalDbm = -51,
+                rssiDbm = -51,
+                rsrpDbm = null,
+                isRegistered = true,
+                servingRat = "2G",
+                networkType = "2G_GSM"
+            ),
+            RawCellCandidate(
+                pci = 18,
+                tac = 18452,
+                eci = 4568,
+                channelNumber = 1021,
+                primarySignalDbm = -78,
+                rssiDbm = -78,
+                rsrpDbm = null,
+                isRegistered = true,
+                servingRat = "2G",
+                networkType = "2G_GSM"
+            )
+        )
+
+        val classified = ServingCellClassifier.classify(candidates, preferredRat = "2G")
+        val strongGsm = classified.find { it.pci == 32 }
+        val weakerGsm = classified.find { it.pci == 18 }
+
+        assertEquals(ServingStatus.PRIMARY_SERVING, strongGsm?.servingStatus)
+        assertEquals(ServingStatus.SERVING_UNCONFIRMED, weakerGsm?.servingStatus)
+    }
 }

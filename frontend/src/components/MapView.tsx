@@ -1229,21 +1229,40 @@ export const MapView: React.FC<MapViewProps> = ({
                 <span className="font-bold text-amber-600 dark:text-amber-400">
                   {selectedPoint.cinr_db !== null ? `${selectedPoint.cinr_db} dB` : 'N/A'}
                 </span>
-                {selectedPoint.sinr_source && selectedPoint.sinr_source !== 'UNAVAILABLE' && (
+                {selectedPoint.sinr_source && (
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold ${
                     selectedPoint.sinr_source === 'MEASURED'
                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      : selectedPoint.sinr_source === 'ESTIMATED'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                   }`}>
-                    {selectedPoint.sinr_source === 'MEASURED' ? 'MEASURED' : 'ESTIMATED ⓘ'}
+                    {selectedPoint.sinr_source === 'MEASURED'
+                      ? 'MEASURED'
+                      : selectedPoint.sinr_source === 'ESTIMATED'
+                      ? 'ESTIMATED ⓘ'
+                      : 'UNAVAILABLE'}
                   </span>
                 )}
               </div>
-              {selectedPoint.sinr_source === 'ESTIMATED' && selectedPoint.implied_rssi_dbm !== null && selectedPoint.implied_rssi_dbm !== undefined && (
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-mono">
-                  Implied RSSI: {selectedPoint.implied_rssi_dbm} dBm
-                </span>
-              )}
+            </div>
+            <div>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">CARRIER RSSI</span>
+              <span className="text-slate-700 dark:text-slate-300 font-mono text-xs block">
+                {selectedPoint.rssi_dbm !== null && selectedPoint.rssi_dbm !== undefined
+                  ? `${selectedPoint.rssi_dbm} dBm [Measured]`
+                  : selectedPoint.implied_rssi_dbm !== null && selectedPoint.implied_rssi_dbm !== undefined
+                  ? `${selectedPoint.implied_rssi_dbm} dBm [Model-Implied]`
+                  : 'Unknown'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 dark:text-slate-500 text-[10px] block">CARRIER BANDWIDTH</span>
+              <span className="text-slate-700 dark:text-slate-300 font-mono text-xs block">
+                {selectedPoint.bandwidth_khz && selectedPoint.bandwidth_khz > 0 && selectedPoint.bandwidth_khz < 2147483647
+                  ? `${Math.round(selectedPoint.bandwidth_khz / 1000)} MHz`
+                  : 'Unknown'}
+              </span>
             </div>
             <div>
               <span className="text-slate-500 dark:text-slate-500 text-[10px] block">HO TRIGGER</span>

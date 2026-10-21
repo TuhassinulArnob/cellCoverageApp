@@ -481,7 +481,7 @@ export const SummaryStats: React.FC<SummaryStatsProps> = ({
               SINR_est = 10 × log10(12 / (1/RSRQ_linear - 7.0))
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Assumes nominal 50% cell traffic load factor (η = 0.5), uniform subcarrier interference, and flat Rayleigh fading.
+              Assumes nominal 50% cell traffic load factor (η = 0.5), uniform subcarrier interference, and flat Rayleigh fading. Valid for RSRQ &lt; -8.45 dB (positive denominator). For higher RSRQ (unloaded/clean cells), the assumed 50% load model is physically invalid and marked UNAVAILABLE rather than defaulting to an arbitrary 30 dB cap.
             </p>
           </div>
 

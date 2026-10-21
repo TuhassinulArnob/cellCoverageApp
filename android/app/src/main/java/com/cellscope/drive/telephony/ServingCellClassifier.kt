@@ -37,7 +37,8 @@ data class RawCellCandidate(
     val estimationAssumptions: String? = null,
     val sinrConfidence: String? = null,
     val qualitativeDiagnostic: String? = null,
-    val impliedRssiDbm: Double? = null
+    val impliedRssiDbm: Double? = null,
+    val ageMs: Long = 0L
 ) {
     companion object {
         const val CONNECTION_NONE = 0
@@ -62,10 +63,15 @@ object ServingCellClassifier {
      * 3. Ambiguous registered cells demoted to SERVING_UNCONFIRMED, never duplicate PCells.
      * 4. Zero registered cells never promotes a neighbor.
      */
-    fun classify(candidates: List<RawCellCandidate>, preferredPlmn: String? = null): List<ObservedCell> {
+    fun classify(
+        candidates: List<RawCellCandidate>,
+        preferredPlmn: String? = null,
+        preferredRat: String? = null
+    ): List<ObservedCell> {
         if (candidates.isEmpty()) return emptyList()
 
         val cleanPreferredPlmn = preferredPlmn?.trim()?.replace("-", "")
+        val cleanPreferredRat = preferredRat?.trim()?.uppercase(java.util.Locale.US)
 
         // Pass 1: Check for explicit Android API 28+ CellConnectionStatus
         val explicitPrimaries = candidates.filter { it.connectionStatus == RawCellCandidate.CONNECTION_PRIMARY_SERVING }
@@ -74,8 +80,11 @@ object ServingCellClassifier {
         if (explicitPrimaries.isNotEmpty()) {
             val primaryCandidate = explicitPrimaries.maxWithOrNull(
                 compareBy<RawCellCandidate> { cleanPreferredPlmn != null && it.operatorNumeric?.replace("-", "") == cleanPreferredPlmn }
+                    .thenBy { cleanPreferredRat != null && (it.servingRat?.uppercase(java.util.Locale.US) == cleanPreferredRat || it.networkType.uppercase(java.util.Locale.US).contains(cleanPreferredRat)) }
                     .thenBy { hasFullIdentity(it) }
-                    .thenBy { it.rsrpDbm ?: -999 }
+                    .thenBy { it.primarySignalDbm ?: it.rsrpDbm ?: it.rssiDbm ?: -999 }
+                    .thenBy { (it.earfcn ?: it.nrArfcn ?: it.channelNumber) != null }
+                    .thenByDescending { -it.ageMs }
             ) ?: explicitPrimaries.first()
 
             return candidates.map { c ->
@@ -145,19 +154,29 @@ object ServingCellClassifier {
             }
         }
 
-        // Multiple registered cells reported by RIL (e.g. Dual-SIM device): Disambiguate!
+        // Multiple registered cells reported by RIL (e.g. Dual-SIM device or inter-RAT transition cache): Disambiguate!
         // First prioritize candidates that match the active data subscription's registered PLMN
         val matchingPlmnCandidates = if (!cleanPreferredPlmn.isNullOrBlank()) {
             registeredCandidates.filter { it.operatorNumeric?.replace("-", "") == cleanPreferredPlmn }
         } else emptyList()
 
-        val candidatePool = if (matchingPlmnCandidates.isNotEmpty()) matchingPlmnCandidates else registeredCandidates
+        val plmnPool = if (matchingPlmnCandidates.isNotEmpty()) matchingPlmnCandidates else registeredCandidates
 
-        // Select exactly one PCell from eligible pool based on complete identity (TAC/ECI) and superior RSRP
+        // Prioritize candidates matching the active data/voice RAT (e.g. 2G GSM vs stale LTE)
+        val matchingRatCandidates = if (!cleanPreferredRat.isNullOrBlank()) {
+            plmnPool.filter { it.servingRat?.uppercase(java.util.Locale.US) == cleanPreferredRat || it.networkType.uppercase(java.util.Locale.US).contains(cleanPreferredRat) }
+        } else emptyList()
+
+        val candidatePool = if (matchingRatCandidates.isNotEmpty()) matchingRatCandidates else plmnPool
+
+        // Select exactly one PCell from eligible pool based on full identity, superior signal strength, and freshness
         val primaryCandidate = candidatePool.maxWithOrNull(
-            compareBy<RawCellCandidate> { hasFullIdentity(it) }
-                .thenBy { it.rsrpDbm ?: -999 }
-                .thenBy { (it.earfcn ?: it.nrArfcn) != null }
+            compareBy<RawCellCandidate> { cleanPreferredPlmn != null && it.operatorNumeric?.replace("-", "") == cleanPreferredPlmn }
+                .thenBy { cleanPreferredRat != null && (it.servingRat?.uppercase(java.util.Locale.US) == cleanPreferredRat || it.networkType.uppercase(java.util.Locale.US).contains(cleanPreferredRat)) }
+                .thenBy { hasFullIdentity(it) }
+                .thenBy { it.primarySignalDbm ?: it.rsrpDbm ?: it.rssiDbm ?: -999 }
+                .thenBy { (it.earfcn ?: it.nrArfcn ?: it.channelNumber) != null }
+                .thenByDescending { -it.ageMs }
         ) ?: candidatePool.first()
 
         return candidates.map { c ->
@@ -232,7 +251,8 @@ object ServingCellClassifier {
             estimationAssumptions = this.estimationAssumptions,
             sinrConfidence = this.sinrConfidence,
             qualitativeDiagnostic = this.qualitativeDiagnostic,
-            impliedRssiDbm = this.impliedRssiDbm
+            impliedRssiDbm = this.impliedRssiDbm,
+            ageMs = this.ageMs
         )
     }
 }

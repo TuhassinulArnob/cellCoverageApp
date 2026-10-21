@@ -33,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const tabs = [
     { id: 'map', fullLabel: 'Coverage Map', shortLabel: 'Map', icon: Map },
     { id: 'analytics', fullLabel: 'RF Analytics', shortLabel: 'RF Analytics', icon: BarChart3 },
+    { id: 'propagation', fullLabel: 'Radio Propagation & Mobility', shortLabel: 'Propagation', icon: Radio },
     { id: 'performance', fullLabel: 'Speed & QoE', shortLabel: 'Speed/QoE', icon: Gauge },
     { id: 'events', fullLabel: 'Events & Anomalies', shortLabel: 'Events', icon: AlertTriangle },
     { id: 'quality', fullLabel: 'Data Quality', shortLabel: 'Quality', icon: ShieldCheck },

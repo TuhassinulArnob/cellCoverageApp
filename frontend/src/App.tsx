@@ -9,6 +9,7 @@ import { DataQualityPanel } from './components/DataQualityPanel';
 import { ReportExporter } from './components/ReportExporter';
 import { FilterDrawer } from './components/FilterDrawer';
 import { NetworkPerformancePanel } from './components/NetworkPerformancePanel';
+import { RadioPropagationPanel } from './components/RadioPropagationPanel';
 import type {
   AvailableDatasetInfo,
   DatasetSummary,
@@ -302,6 +303,17 @@ export const App: React.FC = () => {
                 summary={effectiveSummary}
                 measurements={filteredMeasurements}
                 extendedAnalysis={extendedAnalysis}
+              />
+            )}
+
+            {currentTab === 'propagation' && (
+              <RadioPropagationPanel
+                measurements={filteredMeasurements}
+                transitions={extendedAnalysis?.transitions || []}
+                onNavigateToMap={(lat, lon) => {
+                  setFocusedCoordinate({ lat, lon });
+                  setCurrentTab('map');
+                }}
               />
             )}
 

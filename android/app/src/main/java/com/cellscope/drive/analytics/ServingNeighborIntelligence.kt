@@ -31,8 +31,9 @@ object ServingNeighborIntelligence {
         val servingRsrp = servingCell.rsrpDbm?.toDouble()
         val bestNeighborRsrp = bestNeighbor?.rsrpDbm?.toDouble()
 
-        val servingBand = LteBandTable.resolveEarfcn(servingCell.earfcn)
-        val servingBandStr = servingBand?.let { "Band ${it.bandNumber} (${it.designation}, ${it.dlFrequencyMhz} MHz)" }
+        val carrierInfo = com.cellscope.drive.telephony.CellularBandResolver.resolve(servingCell)
+        val servingBandStr = carrierInfo?.let { "${it.bandName} • DL: ${it.dlCenterFreqMhz} MHz" }
+            ?: LteBandTable.resolveEarfcn(servingCell.earfcn)?.let { "Band ${it.bandNumber} (${it.designation}, ${it.dlFrequencyMhz} MHz)" }
             ?: (servingCell.earfcn?.let { "EARFCN $it" } ?: "Carrier Unknown")
 
         if (bestNeighbor == null || servingRsrp == null || bestNeighborRsrp == null) {
@@ -53,8 +54,9 @@ object ServingNeighborIntelligence {
         }
 
         val delta = servingRsrp - bestNeighborRsrp
-        val neighborBand = LteBandTable.resolveEarfcn(bestNeighbor.earfcn)
-        val neighborBandStr = neighborBand?.let { "Band ${it.bandNumber} (${it.designation}, ${it.dlFrequencyMhz} MHz)" }
+        val neighborCarrierInfo = bestNeighbor?.let { com.cellscope.drive.telephony.CellularBandResolver.resolve(it) }
+        val neighborBandStr = neighborCarrierInfo?.let { "${it.bandName} • DL: ${it.dlCenterFreqMhz} MHz" }
+            ?: LteBandTable.resolveEarfcn(bestNeighbor.earfcn)?.let { "Band ${it.bandNumber} (${it.designation}, ${it.dlFrequencyMhz} MHz)" }
             ?: (bestNeighbor.earfcn?.let { "EARFCN $it" } ?: "Carrier Unknown")
 
         val isInterFreq = servingCell.earfcn != null && bestNeighbor.earfcn != null && servingCell.earfcn != bestNeighbor.earfcn
@@ -105,7 +107,7 @@ object ServingNeighborIntelligence {
                 servingBandText = servingBandStr,
                 neighborBandText = neighborBandStr,
                 engineeringVerdict = "Inter-Frequency Carrier Layer Management",
-                primaryReason = "Neighbor is on a different carrier layer (${neighborBand?.bandNumber?.let { "Band $it" } ?: "Inter-freq"}). Network deliberately keeps UE on high-capacity layer ($servingBandStr) to preserve bandwidth.",
+                primaryReason = "Neighbor is on a different carrier layer ($neighborBandStr). Network deliberately keeps UE on high-capacity layer ($servingBandStr) to preserve bandwidth.",
                 standardsBasis = "3GPP TS 36.304 §5.2.4 & TS 36.331 Event A5: Capacity-layer retention policy holds connection until serving degrades below threshold.",
                 confirmedFacts = confirmedFacts,
                 networkHypotheses = hypotheses

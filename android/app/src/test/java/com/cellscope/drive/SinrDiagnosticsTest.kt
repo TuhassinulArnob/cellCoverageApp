@@ -240,5 +240,175 @@ class SinrDiagnosticsTest {
         assertEquals(75, SinrDiagnostics.bandwidthToResourceBlocks(15000))
         assertEquals(100, SinrDiagnostics.bandwidthToResourceBlocks(20000))
         assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(null))
+
+        // Vendor HAL MHz values normalization
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(10))
+        assertEquals(100, SinrDiagnostics.bandwidthToResourceBlocks(20))
+        assertEquals(25, SinrDiagnostics.bandwidthToResourceBlocks(5))
+        assertEquals(15, SinrDiagnostics.bandwidthToResourceBlocks(3))
+        assertEquals(6, SinrDiagnostics.bandwidthToResourceBlocks(1))
+    }
+
+    @Test
+    fun testEstimatedLteSinr_rsrqSamplesMatrix() {
+        // Sample A: RSRP -101 dBm, RSRQ -11 dB -> 3.3 dB (Nominal 50% load model)
+        val resA = SinrDiagnostics.resolveLteSinr(
+            rawRssnr = null,
+            rsrpDbm = -101,
+            rsrqDb = -11,
+            bandwidthKhz = 10000
+        )
+        assertEquals(SinrDiagnostics.SOURCE_ESTIMATED, resA.source)
+        assertEquals(3.3, resA.sinrDb!!, 0.1)
+        assertEquals("CALIBRATED_ESTIMATE", resA.confidence)
+        assertEquals("3GPP_TS_36_214_RSRQ_LOAD_MODEL", resA.estimationMethod)
+
+        // Sample B: RSRP -103 dBm, RSRQ -10 dB -> 6.0 dB (Nominal 50% load model)
+        val resB = SinrDiagnostics.resolveLteSinr(
+            rawRssnr = null,
+            rsrpDbm = -103,
+            rsrqDb = -10,
+            bandwidthKhz = 10000
+        )
+        assertEquals(SinrDiagnostics.SOURCE_ESTIMATED, resB.source)
+        assertEquals(6.0, resB.sinrDb!!, 0.1)
+        assertEquals("CALIBRATED_ESTIMATE", resB.confidence)
+        assertEquals("3GPP_TS_36_214_RSRQ_LOAD_MODEL", resB.estimationMethod)
+
+        // User screenshot scenario: RSRP = -97 dBm, RSRQ = -8 dB, Modem RSSI = -89 dBm, Unknown BW
+        // Evaluates under 3GPP Bounded-Load Model: eta_max = 43.1%, expected eta = 21.5% -> 7.5 dB
+        val res8 = SinrDiagnostics.resolveLteSinr(
+            rawRssnr = null,
+            rsrpDbm = -97,
+            rsrqDb = -8,
+            rssiDbm = -89,
+            bandwidthKhz = null
+        )
+        assertEquals(SinrDiagnostics.SOURCE_ESTIMATED, res8.source)
+        assertEquals(7.5, res8.sinrDb!!, 0.1)
+        assertEquals("BOUNDED_LOAD_ESTIMATE", res8.confidence)
+        assertEquals("3GPP_TS_36_214_BOUNDED_LOAD_MODEL", res8.estimationMethod)
+        assertTrue(res8.estimationAssumptions!!.contains("bounds traffic load"))
+        assertTrue(res8.estimationAssumptions!!.contains("Physical SINR bounds"))
+        assertNotNull(res8.impliedRssiDbm)
+
+        // RSRQ = -7 dB: Lightly loaded cell -> 9.0 dB under Bounded-Load Model
+        val res7 = SinrDiagnostics.resolveLteSinr(
+            rawRssnr = null,
+            rsrpDbm = -90,
+            rsrqDb = -7,
+            bandwidthKhz = 10000
+        )
+        assertEquals(SinrDiagnostics.SOURCE_ESTIMATED, res7.source)
+        assertEquals(9.0, res7.sinrDb!!, 0.1)
+        assertEquals("BOUNDED_LOAD_ESTIMATE", res7.confidence)
+        assertEquals("3GPP_TS_36_214_BOUNDED_LOAD_MODEL", res7.estimationMethod)
+
+        // RSRQ = -3 dB: 3GPP TS 36.133 Table 9.1.7-1 Index 34 theoretical saturation ceiling
+        // Interference is below receiver noise floor; mathematical inversion is indeterminate.
+        // Returns UNAVAILABLE with explicit ceiling saturation diagnostic (never fabricated 30 dB).
+        val res3 = SinrDiagnostics.resolveLteSinr(
+            rawRssnr = null,
+            rsrpDbm = -80,
+            rsrqDb = -3,
+            bandwidthKhz = 10000
+        )
+        assertEquals(SinrDiagnostics.SOURCE_UNAVAILABLE, res3.source)
+        assertNull(res3.sinrDb)
+        assertTrue(res3.qualitativeDiagnostic.contains("Clean RF channel"))
+        assertTrue(res3.qualitativeDiagnostic.contains("saturation ceiling"))
+        assertTrue(res3.estimationAssumptions!!.contains("theoretical ceiling"))
+    }
+
+    @Test
+    fun testBandwidthValidation_sentinelsAndMissing() {
+        // Missing bandwidth defaults to nominal 50 RBs (10 MHz)
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(null))
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(0))
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(-5000))
+
+        // Integer.MAX_VALUE / CellInfo.UNAVAILABLE sentinel (2147483647)
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(Integer.MAX_VALUE))
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(2147483647))
+
+        // Implausible bandwidth > 100 MHz
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(500000))
+
+        // Valid LTE bandwidths in kHz
+        assertEquals(6, SinrDiagnostics.bandwidthToResourceBlocks(1400))
+        assertEquals(15, SinrDiagnostics.bandwidthToResourceBlocks(3000))
+        assertEquals(25, SinrDiagnostics.bandwidthToResourceBlocks(5000))
+        assertEquals(50, SinrDiagnostics.bandwidthToResourceBlocks(10000))
+        assertEquals(75, SinrDiagnostics.bandwidthToResourceBlocks(15000))
+        assertEquals(100, SinrDiagnostics.bandwidthToResourceBlocks(20000))
+
+        // When bandwidth is Integer.MAX_VALUE in resolveLteSinr, it is treated as nominal and does not fail
+        val res = SinrDiagnostics.resolveLteSinr(
+            rawRssnr = null,
+            rsrpDbm = -95,
+            rsrqDb = -11,
+            bandwidthKhz = Integer.MAX_VALUE
+        )
+        assertEquals(SinrDiagnostics.SOURCE_ESTIMATED, res.source)
+        assertEquals(3.3, res.sinrDb!!, 0.1)
+        assertTrue(res.estimationAssumptions!!.contains("nominal 10 MHz assumption"))
+
+        // Bandwidth independence demonstration:
+        // Estimated SINR at RSRQ = -8 dB is identical (7.5 dB) regardless of whether bandwidth is 10 MHz, 20 MHz, or unknown
+        val resBw10 = SinrDiagnostics.resolveLteSinr(rawRssnr = null, rsrpDbm = -97, rsrqDb = -8, bandwidthKhz = 10000)
+        val resBw20 = SinrDiagnostics.resolveLteSinr(rawRssnr = null, rsrpDbm = -97, rsrqDb = -8, bandwidthKhz = 20000)
+        val resBwUnknown = SinrDiagnostics.resolveLteSinr(rawRssnr = null, rsrpDbm = -97, rsrqDb = -8, bandwidthKhz = null)
+        assertEquals(7.5, resBw10.sinrDb!!, 0.05)
+        assertEquals(7.5, resBw20.sinrDb!!, 0.05)
+        assertEquals(7.5, resBwUnknown.sinrDb!!, 0.05)
+    }
+
+    @Test
+    fun testSuspectBasebandClamp_validVsSuspiciousMinus44() {
+        // Suspicious baseband clamp: RSRP = -44 dBm, RSRQ = -3 dB, RSSI <= -100 (or null)
+        assertTrue(
+            com.cellscope.drive.analytics.RadioQualityEngine.isSuspectBasebandClamp(
+                rsrp = -44,
+                rsrq = -3,
+                rssi = null,
+                networkType = "LTE"
+            )
+        )
+        assertTrue(
+            com.cellscope.drive.analytics.RadioQualityEngine.isSuspectBasebandClamp(
+                rsrp = -44,
+                rsrq = -3,
+                rssi = -105,
+                networkType = "LTE"
+            )
+        )
+
+        // Valid strong -44 dBm near-tower reading with normal RSSI and RSRQ
+        assertFalse(
+            com.cellscope.drive.analytics.RadioQualityEngine.isSuspectBasebandClamp(
+                rsrp = -44,
+                rsrq = -8,
+                rssi = -25,
+                networkType = "LTE"
+            )
+        )
+        assertFalse(
+            com.cellscope.drive.analytics.RadioQualityEngine.isSuspectBasebandClamp(
+                rsrp = -44,
+                rsrq = -10,
+                rssi = -30,
+                networkType = "LTE"
+            )
+        )
+
+        // Valid 2G reading at -44 dBm
+        assertFalse(
+            com.cellscope.drive.analytics.RadioQualityEngine.isSuspectBasebandClamp(
+                rsrp = -44,
+                rsrq = -3,
+                rssi = -105,
+                networkType = "GSM"
+            )
+        )
     }
 }

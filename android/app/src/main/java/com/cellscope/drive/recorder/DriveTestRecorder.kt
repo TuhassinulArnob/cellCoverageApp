@@ -282,11 +282,11 @@ class DriveTestRecorder private constructor(private val context: Context) {
                     var confidence = 0.80f
 
                     val currentRat = metrics.servingRat ?: metrics.networkGen.code
-                    val currentChannel = metrics.channelNumber ?: metrics.earfcn ?: lastRecordedChannel
-                    val currentCellId = metrics.eci ?: lastRecordedCellId
+                    val currentChannel = metrics.channelNumber ?: metrics.earfcn
+                    val currentCellId = metrics.eci
                     val currentPci = metrics.servingPci
                     val currentRsrp = metrics.rsrpDbm ?: metrics.primarySignalDbm
-                    val currentTac = metrics.tac ?: lastRecordedTac
+                    val currentTac = metrics.tac
 
                     val hasPrevious = (lastRecordedRat != null || lastRecordedPci != null || lastRecordedCellId != null)
 
@@ -299,14 +299,14 @@ class DriveTestRecorder private constructor(private val context: Context) {
                         val isMoving = (gps.speedKmh ?: 0f) >= 2.5f && !gps.isStationary
                         // A. Inter-RAT Transition (e.g. 4G -> 2G, 2G -> 4G, 4G -> 3G, 5G -> 4G)
                         if (lastRecordedRat != null && currentRat != null && lastRecordedRat != currentRat) {
-                            hoTrigger = 0
+                            hoTrigger = 1
                             transType = "INTER_RAT"
                             confidence = 0.95f
-                            transDetails = "Inter-RAT transition: $lastRecordedRat -> $currentRat (Ch: $lastRecordedChannel -> $currentChannel)"
+                            transDetails = "Inter-RAT transition: $lastRecordedRat -> $currentRat (Ch: ${lastRecordedChannel ?: "—"} -> ${currentChannel ?: "—"})"
                         }
                         // B. Physical Serving Cell Change (PCI changed)
                         else if (lastRecordedPci != null && currentPci != null && lastRecordedPci != currentPci) {
-                            hoTrigger = 0
+                            hoTrigger = 1
                             val tacNote = if (isTacChanged) " (TAC $lastRecordedTac -> $currentTac)" else ""
                             if (isSignalDrop) {
                                 transType = "SIGNAL_LOSS"
@@ -333,7 +333,7 @@ class DriveTestRecorder private constructor(private val context: Context) {
                         }
                         // C. Inter-Frequency Transition (Channel changed on same RAT without PCI change or when PCI null)
                         else if (lastRecordedChannel != null && currentChannel != null && lastRecordedChannel != currentChannel) {
-                            hoTrigger = 0
+                            hoTrigger = 1
                             transType = "INTER_FREQ"
                             confidence = 0.60f
                             transDetails = "Inter-frequency transition on $currentRat: Ch $lastRecordedChannel -> $currentChannel (PCI: ${lastRecordedPci ?: currentPci ?: "?"})"
@@ -375,8 +375,16 @@ class DriveTestRecorder private constructor(private val context: Context) {
                         Log.i("DriveTestRecorder", "Cell transition: $transType | $transDetails")
                     }
 
-                    // Always update last recorded metrics (never conditional on servingPci != null)
-                    if (currentRat != null || currentPci != null || currentCellId != null) {
+                    // Always update last recorded metrics, ensuring clean RAT isolation upon inter-RAT transition
+                    val ratChanged = (lastRecordedRat != null && currentRat != null && lastRecordedRat != currentRat)
+                    if (ratChanged) {
+                        lastRecordedPci = currentPci
+                        lastRecordedRsrp = currentRsrp
+                        lastRecordedTac = currentTac
+                        lastRecordedRat = currentRat
+                        lastRecordedChannel = currentChannel
+                        lastRecordedCellId = currentCellId
+                    } else if (currentRat != null || currentPci != null || currentCellId != null) {
                         lastRecordedPci = currentPci ?: lastRecordedPci
                         lastRecordedRsrp = currentRsrp ?: lastRecordedRsrp
                         lastRecordedTac = currentTac ?: lastRecordedTac

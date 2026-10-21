@@ -131,17 +131,34 @@ def get_metric_color(metric_name: str, value: Optional[float]) -> str:
 
 def bandwidth_to_rb(bandwidth_khz: Optional[int]) -> int:
     """Map LTE channel bandwidth in kHz to 3GPP TS 36.101 Resource Block count N."""
-    if bandwidth_khz is None or bandwidth_khz <= 0:
+    if (
+        bandwidth_khz is None
+        or bandwidth_khz <= 0
+        or bandwidth_khz == 0x7FFFFFFF
+    ):
         return 50  # Default nominal 10 MHz
-    if bandwidth_khz <= 1400:
-        return 6
-    if bandwidth_khz <= 3000:
-        return 15
-    if bandwidth_khz <= 5000:
-        return 25
-    if bandwidth_khz <= 10000:
+
+    # Vendor HAL integer MHz mapping
+    normalized = {
+        1: 1400,
+        3: 3000,
+        5: 5000,
+        10: 10000,
+        15: 15000,
+        20: 20000,
+    }.get(bandwidth_khz, bandwidth_khz)
+
+    if not (1400 <= normalized <= 100000):
         return 50
-    if bandwidth_khz <= 15000:
+    if normalized <= 1400:
+        return 6
+    if normalized <= 3000:
+        return 15
+    if normalized <= 5000:
+        return 25
+    if normalized <= 10000:
+        return 50
+    if normalized <= 15000:
         return 75
     return 100
 
@@ -165,34 +182,50 @@ def estimate_lte_sinr(
     load_factor: float = 0.5
 ) -> Tuple[Optional[float], Optional[float]]:
     """
-    Estimate LTE SINR using 3GPP TS 36.214 radio model under nominal cell load.
+    Estimate LTE SINR using 3GPP TS 36.214 radio model.
 
-    Formula:
-      offset = 2.0 + 10.0 * load_factor (7.0 for 50% traffic load)
-      denom = (1.0 / RSRQ_linear) - offset
-      SINR_linear = 12.0 / denom (if denom > 0.001) else clamped to max 30 dB
+    Regime 3 (Ceiling): RSRQ >= -3.01 dB -> Indeterminate saturation ceiling (None, implied_rssi)
+    Regime 1 (Loaded): RSRQ <= -8.45 dB -> Nominal load_factor model (offset = 2 + 10*load_factor)
+    Regime 2 (Bounded light-load): -8.45 dB < RSRQ < -3.01 dB -> Bounded-load model using expected load
 
     Returns (estimated_sinr_db, implied_rssi_dbm).
     """
     import math
     if rsrp_dbm is None or rsrq_db is None:
         return None, None
-    if not (-140.0 <= rsrp_dbm <= -40.0 and -25.0 <= rsrq_db <= -3.0):
+    if not (-140.0 <= rsrp_dbm <= -40.0 and -25.0 <= rsrq_db <= -1.0):
         return None, None
 
     implied_rssi = calculate_implied_rssi(rsrp_dbm, rsrq_db, bandwidth_khz)
+
+    # 3GPP TS 36.133 Table 9.1.7-1 Index 34 Ceiling
+    if rsrq_db >= -3.01:
+        return None, implied_rssi
+
     rsrq_linear = 10.0 ** (rsrq_db / 10.0)
-    offset = 2.0 + (10.0 * load_factor)
-    denom = (1.0 / rsrq_linear) - offset
+
+    # Regime 1: Loaded Cell Regime (RSRQ <= -8.45 dB)
+    if rsrq_db <= -8.45:
+        offset = 2.0 + (10.0 * load_factor)
+        denom = (1.0 / rsrq_linear) - offset
+        if denom > 0.001:
+            sinr_linear = 12.0 / denom
+            sinr_db = 10.0 * math.log10(sinr_linear)
+            sinr_db = max(-20.0, min(30.0, sinr_db))
+            return round(sinr_db, 1), implied_rssi
+
+    # Regime 2: Lightly Loaded Cell Regime (-8.45 dB < RSRQ < -3.01 dB)
+    eta_max = ((1.0 / rsrq_linear) - 2.0) / 10.0
+    eta_avg = max(0.0, min(0.5, eta_max / 2.0))
+    denom = (1.0 / rsrq_linear) - (2.0 + 10.0 * eta_avg)
 
     if denom > 0.001:
         sinr_linear = 12.0 / denom
         sinr_db = 10.0 * math.log10(sinr_linear)
         sinr_db = max(-20.0, min(30.0, sinr_db))
-    else:
-        sinr_db = 30.0
+        return round(sinr_db, 1), implied_rssi
 
-    return round(sinr_db, 1), implied_rssi
+    return None, implied_rssi
 
 
 def get_sinr_qualitative_diagnostic(sinr_db: Optional[float], rsrq_db: Optional[float] = None) -> str:
@@ -267,17 +300,53 @@ def resolve_sinr_provenance(
         )
 
     # Evaluate LTE estimation
-    est_sinr, implied_rssi = estimate_lte_sinr(rsrp_dbm, rsrq_db, bandwidth_khz)
+    valid_bw = None
+    if bandwidth_khz is not None and bandwidth_khz != 0x7FFFFFFF:
+        normalized_bw = {1: 1400, 3: 3000, 5: 5000, 10: 10000, 15: 15000, 20: 20000}.get(bandwidth_khz, bandwidth_khz)
+        if 1400 <= normalized_bw <= 100000:
+            valid_bw = normalized_bw
+
+    est_sinr, implied_rssi = estimate_lte_sinr(rsrp_dbm, rsrq_db, valid_bw)
     if est_sinr is not None:
-        rb = bandwidth_to_rb(bandwidth_khz)
-        bw_label = f"{bandwidth_khz // 1000} MHz" if bandwidth_khz and bandwidth_khz > 0 else "10 MHz (nominal assumption)"
+        import math
+        rb = bandwidth_to_rb(valid_bw)
+        bw_label = f"{valid_bw // 1000} MHz" if valid_bw else "10 MHz (nominal assumption; cancels out in SINR)"
+        if rsrq_db is not None and rsrq_db > -8.45:
+            # Bounded load model for lightly loaded cell
+            rsrq_lin = 10.0 ** (rsrq_db / 10.0)
+            eta_max = ((1.0 / rsrq_lin) - 2.0) / 10.0
+            eta_avg = eta_max / 2.0
+            denom_min = (1.0 / rsrq_lin) - 2.0
+            sinr_min = round(10.0 * math.log10(12.0 / denom_min), 1) if denom_min > 0.001 else -20.0
+            return (
+                est_sinr,
+                "ESTIMATED",
+                "3GPP_TS_36_214_BOUNDED_LOAD_MODEL",
+                f"Derived from 3GPP TS 36.214 carrier RSSI relation (N={rb} RBs, {bw_label}). RSRQ ({rsrq_db} dB) physically bounds traffic load to eta in [0%, {round(eta_max*100, 1)}%]. Model uses expected load eta_avg = {round(eta_avg*100, 1)}% under uniform prior. Physical SINR bounds: [{sinr_min} dB, 30.0 dB].",
+                "BOUNDED_LOAD_ESTIMATE",
+                get_sinr_qualitative_diagnostic(est_sinr),
+                implied_rssi
+            )
+        else:
+            return (
+                est_sinr,
+                "ESTIMATED",
+                "3GPP_TS_36_214_RSRQ_LOAD_MODEL",
+                f"Derived from RSRQ = N*RSRP/RSSI (N={rb} RBs, {bw_label}). Assumes nominal 50% cell traffic load (eta=0.5), flat Rayleigh channel. Estimated uncertainty is +/- 3.5 dB.",
+                "CALIBRATED_ESTIMATE",
+                get_sinr_qualitative_diagnostic(est_sinr),
+                implied_rssi
+            )
+
+    # When estimation is unavailable due to saturation ceiling (RSRQ >= -3.01 dB)
+    if rsrq_db is not None and rsrq_db >= -3.01 and rsrp_dbm is not None and -140.0 <= rsrp_dbm <= -40.0:
         return (
-            est_sinr,
-            "ESTIMATED",
-            "3GPP_TS_36_214_RSRQ_LOAD_MODEL",
-            f"Derived from RSRQ = N*RSRP/RSSI (N={rb} RBs, {bw_label}). Assumes nominal 50% cell traffic load (eta=0.5), flat Rayleigh channel. Estimated uncertainty is +/- 3.5 dB.",
-            "CALIBRATED_ESTIMATE",
-            get_sinr_qualitative_diagnostic(est_sinr),
+            None,
+            "UNAVAILABLE",
+            "3GPP_TS_36_214_BOUNDED_LOAD_MODEL",
+            f"RSRQ ({rsrq_db} dB) is at or above the 3GPP theoretical ceiling (-3.0 dB, where RSSI = 2*N*RSRP). Interference is below receiver noise floor; multiple SINR values map to this saturated state. Inversion is indeterminate.",
+            None,
+            f"Clean RF channel conditions indicated by strong RSRQ ({rsrq_db} dB); model-based SINR estimation unavailable at 3GPP saturation ceiling (RSRQ >= -3 dB)",
             implied_rssi
         )
 

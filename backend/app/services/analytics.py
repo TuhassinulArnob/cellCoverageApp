@@ -107,6 +107,7 @@ def process_and_summarize_dataset(
     cqi_col = mapping.get("cqi")
     eci_col = mapping.get("eci")
     alt_col = mapping.get("altitude")
+    bw_col = mapping.get("bandwidth_khz") or mapping.get("bandwidth")
 
     has_gps = (lat_col is not None and lon_col is not None)
     if not has_gps:
@@ -208,10 +209,12 @@ def process_and_summarize_dataset(
         cqi_val = int(clean_numeric_value(row[cqi_col])) if cqi_col and clean_numeric_value(row[cqi_col]) is not None else None
         eci_val = int(clean_numeric_value(row[eci_col])) if eci_col and clean_numeric_value(row[eci_col]) is not None else None
 
-        # TAC, EARFCN, RSSI, Operator, Network Type
+        # TAC, EARFCN, RSSI, Operator, Network Type, Bandwidth
         tac_val = int(clean_numeric_value(row[tac_col])) if tac_col and clean_numeric_value(row[tac_col]) is not None else None
         earfcn_val = int(clean_numeric_value(row[earfcn_col])) if earfcn_col and clean_numeric_value(row[earfcn_col]) is not None else None
         rssi_val = clean_numeric_value(row[rssi_col]) if rssi_col else None
+        raw_bw = clean_numeric_value(row[bw_col]) if bw_col else None
+        bw_val = int(raw_bw) if (raw_bw is not None and raw_bw != 0x7FFFFFFF and 1400 <= raw_bw <= 100000) else None
         net_type_val = str(row[net_col]).strip() if net_col and pd.notna(row[net_col]) else None
         op_val = str(row[op_col]).strip() if op_col and pd.notna(row[op_col]) else None
 
@@ -287,9 +290,10 @@ def process_and_summarize_dataset(
             elif csv_source == "ESTIMATED":
                 effective_sinr = cinr_raw
                 sinr_source = "ESTIMATED"
-                est_method = csv_method or "3GPP_TS_36_214_RSRQ_LOAD_MODEL"
+                default_method = "3GPP_TS_36_214_BOUNDED_LOAD_MODEL" if (rsrq_db is not None and rsrq_db > -8.45) else "3GPP_TS_36_214_RSRQ_LOAD_MODEL"
+                est_method = csv_method or default_method
                 est_assumptions = "Imported 3GPP estimated SINR"
-                sinr_conf = "CALIBRATED_ESTIMATE"
+                sinr_conf = "BOUNDED_LOAD_ESTIMATE" if (rsrq_db is not None and rsrq_db > -8.45) else "CALIBRATED_ESTIMATE"
                 qual_diag = get_sinr_qualitative_diagnostic(cinr_raw, rsrq_db)
                 implied_rssi = calculate_implied_rssi(rsrp_dbm, rsrq_db) if (rsrp_dbm is not None and rsrq_db is not None) else rssi_val
             else:  # MEASURED
@@ -314,7 +318,7 @@ def process_and_summarize_dataset(
                 rsrp_dbm=rsrp_dbm,
                 rsrq_db=rsrq_db,
                 rssi_dbm=rssi_val,
-                bandwidth_khz=None,
+                bandwidth_khz=bw_val,
                 rat=gen_val,
                 has_seen_nonzero_sinr=has_seen_nonzero_cinr
             )
@@ -383,6 +387,7 @@ def process_and_summarize_dataset(
             sinr_confidence=sinr_conf,
             qualitative_diagnostic=qual_diag,
             implied_rssi_dbm=implied_rssi,
+            bandwidth_khz=bw_val,
         )
         points.append(point)
 

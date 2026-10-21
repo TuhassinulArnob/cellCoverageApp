@@ -60,7 +60,14 @@ class CellAdapter(
                 )
             }
 
-            binding.tvCellRole.text = roleText
+            val ratPrefix = when {
+                cell.isGsm -> "2G "
+                cell.isWcdma -> "3G "
+                cell.is5gNr -> "5G "
+                else -> "4G "
+            }
+
+            binding.tvCellRole.text = "$ratPrefix$roleText"
             binding.tvCellRole.backgroundTintList = ContextCompat.getColorStateList(ctx, roleBgColor)
             binding.tvCellRole.setTextColor(ContextCompat.getColor(ctx, roleTextColor))
 
